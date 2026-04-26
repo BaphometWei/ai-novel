@@ -22,22 +22,26 @@ export class ReviewRepository {
     const row = await this.db.select().from(reviewReports).where(eq(reviewReports.id, id)).get();
     if (!row) return null;
 
-    return {
-      id: row.id,
-      projectId: row.projectId,
-      manuscriptVersionId: row.manuscriptVersionId,
-      profile: JSON.parse(row.profileJson) as ReviewReport['profile'],
-      findings: JSON.parse(row.findingsJson) as ReviewReport['findings'],
-      qualityScore: JSON.parse(row.qualityScoreJson) as ReviewReport['qualityScore'],
-      openFindingCount: row.openFindingCount
-    };
+    return toReviewReport(row);
+  }
+
+  async findReportContainingFinding(projectId: string, findingId: string): Promise<ReviewReport | null> {
+    const rows = await this.db.select().from(reviewReports).where(eq(reviewReports.projectId, projectId)).all();
+    const row = rows.find((reportRow) =>
+      (JSON.parse(reportRow.findingsJson) as ReviewReport['findings']).some((finding) => finding.id === findingId)
+    );
+    return row ? toReviewReport(row) : null;
+  }
+
+  private async findingExists(findingId: string): Promise<boolean> {
+    const reportRows = await this.db.select().from(reviewReports).all();
+    return reportRows.some((row) =>
+      (JSON.parse(row.findingsJson) as ReviewReport['findings']).some((finding) => finding.id === findingId)
+    );
   }
 
   async saveRevisionSuggestion(suggestion: RevisionSuggestion): Promise<void> {
-    const reportRows = await this.db.select().from(reviewReports).all();
-    const findingExists = reportRows.some((row) =>
-      (JSON.parse(row.findingsJson) as ReviewReport['findings']).some((finding) => finding.id === suggestion.findingId)
-    );
+    const findingExists = await this.findingExists(suggestion.findingId);
     if (!findingExists) {
       throw new Error(`Review finding not found: ${suggestion.findingId}`);
     }
@@ -69,4 +73,18 @@ export class ReviewRepository {
       status: row.status as RevisionSuggestion['status']
     };
   }
+}
+
+type ReviewReportRow = typeof reviewReports.$inferSelect;
+
+function toReviewReport(row: ReviewReportRow): ReviewReport {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    manuscriptVersionId: row.manuscriptVersionId,
+    profile: JSON.parse(row.profileJson) as ReviewReport['profile'],
+    findings: JSON.parse(row.findingsJson) as ReviewReport['findings'],
+    qualityScore: JSON.parse(row.qualityScoreJson) as ReviewReport['qualityScore'],
+    openFindingCount: row.openFindingCount
+  };
 }

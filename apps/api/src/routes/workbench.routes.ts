@@ -10,7 +10,8 @@ import {
   type KnowledgeItem,
   type Project,
   type ReaderFeedback,
-  type ReviewReport
+  type ReviewReport,
+  type RevisionSuggestion
 } from '@ai-novel/domain';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
@@ -22,6 +23,9 @@ export interface WorkbenchProjectLookup {
 export interface WorkbenchReviewStore {
   saveReport(report: ReviewReport): Promise<void>;
   findReportById(id: string): Promise<ReviewReport | null>;
+  findReportContainingFinding(projectId: string, findingId: string): Promise<ReviewReport | null>;
+  saveRevisionSuggestion(suggestion: RevisionSuggestion): Promise<void>;
+  findRevisionSuggestionById(id: string): Promise<RevisionSuggestion | null>;
 }
 
 export interface WorkbenchKnowledgeStore {
@@ -156,6 +160,10 @@ const projectReportParamsSchema = projectParamsSchema.extend({
   id: z.string().min(1)
 });
 
+const projectSuggestionParamsSchema = projectParamsSchema.extend({
+  id: z.string().min(1)
+});
+
 const feedbackImportSchema = z.object({
   longTermPlanId: z.string().min(1),
   feedback: z.array(readerFeedbackSchema)
@@ -167,6 +175,7 @@ const feedbackSummaryQuerySchema = z.object({
 
 class InMemoryReviewStore implements WorkbenchReviewStore {
   private readonly reports = new Map<string, ReviewReport>();
+  private readonly revisionSuggestions = new Map<string, RevisionSuggestion>();
 
   async saveReport(report: ReviewReport): Promise<void> {
     this.reports.set(report.id, report);
@@ -174,6 +183,26 @@ class InMemoryReviewStore implements WorkbenchReviewStore {
 
   async findReportById(id: string): Promise<ReviewReport | null> {
     return this.reports.get(id) ?? null;
+  }
+
+  async findReportContainingFinding(projectId: string, findingId: string): Promise<ReviewReport | null> {
+    return (
+      [...this.reports.values()].find(
+        (report) => report.projectId === projectId && report.findings.some((finding) => finding.id === findingId)
+      ) ?? null
+    );
+  }
+
+  async saveRevisionSuggestion(suggestion: RevisionSuggestion): Promise<void> {
+    const findingExists = [...this.reports.values()].some((report) =>
+      report.findings.some((finding) => finding.id === suggestion.findingId)
+    );
+    if (!findingExists) throw new Error(`Review finding not found: ${suggestion.findingId}`);
+    this.revisionSuggestions.set(suggestion.id, suggestion);
+  }
+
+  async findRevisionSuggestionById(id: string): Promise<RevisionSuggestion | null> {
+    return this.revisionSuggestions.get(id) ?? null;
   }
 }
 
@@ -290,6 +319,33 @@ export function registerWorkbenchRoutes(app: FastifyInstance, stores: WorkbenchR
       return reply.code(404).send({ error: 'Review report not found' });
     }
     return reply.send(report);
+  });
+
+  app.post('/projects/:projectId/review/revision-suggestions', async (request, reply) => {
+    const params = projectParamsSchema.safeParse(request.params);
+    const parsed = createRevisionSuggestionSchema.safeParse(request.body);
+    if (!params.success || !parsed.success) return invalidPayload(reply);
+    if (!(await findProjectOr404(stores, params.data.projectId, reply))) return reply;
+
+    const owningReport = await stores.review.findReportContainingFinding(params.data.projectId, parsed.data.findingId);
+    if (!owningReport) return reply.code(404).send({ error: 'Review finding not found' });
+
+    const suggestion = createRevisionSuggestion(parsed.data);
+    await stores.review.saveRevisionSuggestion(suggestion);
+    return reply.code(201).send(suggestion);
+  });
+
+  app.get('/projects/:projectId/review/revision-suggestions/:id', async (request, reply) => {
+    const params = projectSuggestionParamsSchema.safeParse(request.params);
+    if (!params.success) return invalidPayload(reply);
+    if (!(await findProjectOr404(stores, params.data.projectId, reply))) return reply;
+
+    const suggestion = await stores.review.findRevisionSuggestionById(params.data.id);
+    if (!suggestion) return reply.code(404).send({ error: 'Revision suggestion not found' });
+
+    const owningReport = await stores.review.findReportContainingFinding(params.data.projectId, suggestion.findingId);
+    if (!owningReport) return reply.code(404).send({ error: 'Revision suggestion not found' });
+    return reply.send(suggestion);
   });
 
   app.post('/serialization/feedback-summary', async (request, reply) => {
