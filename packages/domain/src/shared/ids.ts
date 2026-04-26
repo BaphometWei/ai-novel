@@ -9,6 +9,7 @@ export type EntityPrefix =
   | 'canon_fact'
   | 'approval_request'
   | 'dependency'
+  | 'foreshadowing'
   | 'reader_promise';
 
 export type EntityId<TPrefix extends EntityPrefix = EntityPrefix> = `${TPrefix}_${string}`;

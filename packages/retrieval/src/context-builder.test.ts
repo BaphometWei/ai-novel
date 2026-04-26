@@ -55,4 +55,38 @@ describe('buildContextPack', () => {
     expect(pack.exclusions).toEqual(['sample_1']);
     expect(pack.warnings).toEqual(['Excluded sample_1 due to source policy']);
   });
+
+  it('excludes Conflict and Deprecated memory from generation context', () => {
+    const pack = buildContextPack({
+      taskGoal: 'Draft a scene',
+      agentRole: 'Writer Agent',
+      riskLevel: 'Medium',
+      query: 'protagonist',
+      items: [
+        {
+          id: 'conflict_1',
+          kind: 'memory',
+          entityKey: 'protagonist:origin',
+          status: 'Conflict',
+          text: 'The protagonist was born in two incompatible places.',
+          sourcePolicy: { allowedUse: ['generation_support'], prohibitedUse: [] }
+        },
+        {
+          id: 'deprecated_1',
+          kind: 'memory',
+          entityKey: 'protagonist:weapon',
+          status: 'Deprecated',
+          text: 'The protagonist uses the old sword.',
+          sourcePolicy: { allowedUse: ['generation_support'], prohibitedUse: [] }
+        }
+      ]
+    });
+
+    expect(pack.sections[0].content).toBe('');
+    expect(pack.exclusions).toEqual(['conflict_1', 'deprecated_1']);
+    expect(pack.warnings).toEqual([
+      'Excluded conflict_1 because memory status is Conflict',
+      'Excluded deprecated_1 because memory status is Deprecated'
+    ]);
+  });
 });

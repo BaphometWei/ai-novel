@@ -68,10 +68,18 @@ export function createCanonFact(input: {
 export function transitionCanonFactStatus(
   fact: CanonFact,
   toStatus: MemoryStatus,
-  input: { actor: 'user' | 'system' | 'agent'; reason: string }
+  input: { actor: 'user' | 'system' | 'agent'; reason: string; approvalStatus?: 'Approved' | 'Pending' | 'Rejected' }
 ): CanonFact {
   if (!canTransitionMemoryStatus(fact.status, toStatus)) {
     throw new Error(`Invalid memory status transition: ${fact.status} -> ${toStatus}`);
+  }
+
+  if (toStatus === 'Canon' && fact.sourceReferences.length === 0) {
+    throw new Error('Canon facts require at least one source reference');
+  }
+
+  if (toStatus === 'Canon' && input.actor !== 'user' && input.approvalStatus !== 'Approved') {
+    throw new Error('Agent and system Canon promotion requires an approved approval request');
   }
 
   const now = systemClock.now();

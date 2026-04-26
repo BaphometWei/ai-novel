@@ -46,7 +46,7 @@ export const agentRuns = sqliteTable('agent_runs', {
 
 export const canonFacts = sqliteTable('canon_facts', {
   id: text('id').primaryKey(),
-  projectId: text('project_id').notNull(),
+  projectId: text('project_id').notNull().references(() => projects.id),
   text: text('text').notNull(),
   status: text('status').notNull(),
   sourceReferencesJson: text('source_references_json').notNull(),
@@ -58,7 +58,7 @@ export const canonFacts = sqliteTable('canon_facts', {
 
 export const approvalRequests = sqliteTable('approval_requests', {
   id: text('id').primaryKey(),
-  projectId: text('project_id').notNull(),
+  projectId: text('project_id').notNull().references(() => projects.id),
   targetType: text('target_type').notNull(),
   targetId: text('target_id').notNull(),
   riskLevel: text('risk_level').notNull(),
@@ -70,7 +70,7 @@ export const approvalRequests = sqliteTable('approval_requests', {
 
 export const dependencyIndexEntries = sqliteTable('dependency_index_entries', {
   id: text('id').primaryKey(),
-  projectId: text('project_id').notNull(),
+  projectId: text('project_id').notNull().references(() => projects.id),
   sourceObjectJson: text('source_object_json').notNull(),
   targetObjectJson: text('target_object_json').notNull(),
   targetType: text('target_type').notNull(),

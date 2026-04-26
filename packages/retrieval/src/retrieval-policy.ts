@@ -25,6 +25,10 @@ export interface ContextBuildInput {
 }
 
 export function canUseForGeneration(item: RetrievalItem): boolean {
+  if (item.status === 'Conflict' || item.status === 'Deprecated') {
+    return false;
+  }
+
   return item.sourcePolicy.allowedUse.includes('generation_support')
     && !item.sourcePolicy.prohibitedUse.includes('generation_support');
 }

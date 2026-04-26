@@ -18,6 +18,12 @@ export function buildContextPack(input: ContextBuildInput) {
   const exclusions: string[] = [];
   const warnings: string[] = [];
   const usable = input.items.filter((item) => {
+    if (item.status === 'Conflict' || item.status === 'Deprecated') {
+      exclusions.push(item.id);
+      warnings.push(`Excluded ${item.id} because memory status is ${item.status}`);
+      return false;
+    }
+
     if (canUseForGeneration(item)) {
       return true;
     }

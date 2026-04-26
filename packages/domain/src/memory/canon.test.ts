@@ -31,4 +31,37 @@ describe('CanonFact governance', () => {
     expect(() => transitionCanonFactStatus(canon, 'Candidate', { actor: 'user', reason: 'invalid rollback' }))
       .toThrow('Invalid memory status transition: Canon -> Candidate');
   });
+
+  it('rejects Canon promotion when source references are missing', () => {
+    const draft = createCanonFact({
+      projectId: 'project_abc',
+      text: 'The protagonist fears deep water.',
+      status: 'Draft',
+      sourceReferences: [],
+      confirmationTrail: []
+    });
+
+    expect(() => transitionCanonFactStatus(draft, 'Canon', { actor: 'user', reason: 'confirmed in outline' }))
+      .toThrow('Canon facts require at least one source reference');
+  });
+
+  it('requires approval for agent or system Canon promotion', () => {
+    const draft = createCanonFact({
+      projectId: 'project_abc',
+      text: 'The protagonist fears deep water.',
+      status: 'Draft',
+      sourceReferences: [{ sourceType: 'user_note', sourceId: 'note_1', citation: 'initial idea' }],
+      confirmationTrail: []
+    });
+
+    expect(() => transitionCanonFactStatus(draft, 'Canon', { actor: 'agent', reason: 'extracted from draft' }))
+      .toThrow('Agent and system Canon promotion requires an approved approval request');
+
+    const canon = transitionCanonFactStatus(draft, 'Canon', {
+      actor: 'agent',
+      reason: 'approved extraction',
+      approvalStatus: 'Approved'
+    });
+    expect(canon.status).toBe('Canon');
+  });
 });

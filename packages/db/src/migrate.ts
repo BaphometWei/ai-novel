@@ -53,7 +53,8 @@ const statements = [
     confirmation_trail_json TEXT NOT NULL,
     ledger_json TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
   )`,
   `CREATE TABLE IF NOT EXISTS approval_requests (
     id TEXT PRIMARY KEY,
@@ -64,7 +65,8 @@ const statements = [
     reason TEXT NOT NULL,
     proposed_action TEXT NOT NULL,
     status TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
   )`,
   `CREATE TABLE IF NOT EXISTS dependency_index_entries (
     id TEXT PRIMARY KEY,
@@ -76,7 +78,8 @@ const statements = [
     dependency_type TEXT NOT NULL,
     confidence INTEGER NOT NULL,
     source_run_id TEXT NOT NULL,
-    invalidation_rule TEXT NOT NULL
+    invalidation_rule TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
   )`,
   `CREATE VIRTUAL TABLE IF NOT EXISTS search_documents USING fts5(
     id UNINDEXED,
