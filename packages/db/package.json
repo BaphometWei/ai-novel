@@ -1,0 +1,21 @@
+{
+  "name": "@ai-novel/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "db:check": "tsx src/check.ts",
+    "test": "vitest run src"
+  },
+  "dependencies": {
+    "@ai-novel/domain": "file:../domain",
+    "@libsql/client": "^0.14.0",
+    "drizzle-orm": "^0.31.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0"
+  }
+}
