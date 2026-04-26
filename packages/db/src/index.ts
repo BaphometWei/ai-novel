@@ -6,4 +6,5 @@ export * from './repositories/context-pack.repository';
 export * from './repositories/dependency.repository';
 export * from './repositories/memory.repository';
 export * from './repositories/project.repository';
+export * from './repositories/search.repository';
 export * from './schema';

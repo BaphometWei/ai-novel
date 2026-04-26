@@ -77,6 +77,13 @@ const statements = [
     confidence INTEGER NOT NULL,
     source_run_id TEXT NOT NULL,
     invalidation_rule TEXT NOT NULL
+  )`,
+  `CREATE VIRTUAL TABLE IF NOT EXISTS search_documents USING fts5(
+    id UNINDEXED,
+    project_id UNINDEXED,
+    source_type UNINDEXED,
+    title,
+    body
   )`
 ];
 
