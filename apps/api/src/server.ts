@@ -1,6 +1,6 @@
-import { buildApp } from './app';
+import { createPersistentApiRuntime } from './runtime';
 
-const app = buildApp();
+const runtime = await createPersistentApiRuntime();
 const port = Number(process.env.PORT ?? 4000);
 
-await app.listen({ host: '127.0.0.1', port });
+await runtime.app.listen({ host: '127.0.0.1', port });

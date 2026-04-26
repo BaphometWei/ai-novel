@@ -1,6 +1,27 @@
+import { systemClock } from '../shared/clock';
+import { createId, type EntityId } from '../shared/ids';
+
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+}
+
+export type LlmCallStatus = 'Succeeded' | 'Failed';
+
+export interface LlmCallRecord {
+  id: EntityId<'llm_call'>;
+  agentRunId: EntityId<'agent_run'>;
+  promptVersionId: string;
+  provider: string;
+  model: string;
+  schemaName?: string;
+  usage: TokenUsage;
+  durationMs: number;
+  estimatedCostUsd: number;
+  retryCount: number;
+  status: LlmCallStatus;
+  error?: string;
+  createdAt: string;
 }
 
 export interface ProviderAdapter {
@@ -18,4 +39,12 @@ export interface ProviderAdapter {
 
 export function defineProviderAdapter(adapter: ProviderAdapter): ProviderAdapter {
   return adapter;
+}
+
+export function createLlmCallRecord(input: Omit<LlmCallRecord, 'id' | 'createdAt'>): LlmCallRecord {
+  return {
+    id: createId('llm_call'),
+    createdAt: systemClock.now(),
+    ...input
+  };
 }

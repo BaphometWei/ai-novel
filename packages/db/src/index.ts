@@ -6,6 +6,7 @@ export * from './repositories/context-pack.repository';
 export * from './repositories/dependency.repository';
 export * from './repositories/durable-job.repository';
 export * from './repositories/knowledge.repository';
+export * from './repositories/llm-call-log.repository';
 export * from './repositories/memory.repository';
 export * from './repositories/project.repository';
 export * from './repositories/review.repository';

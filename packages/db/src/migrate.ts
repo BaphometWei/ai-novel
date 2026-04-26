@@ -57,6 +57,23 @@ const statements = [
     retry_count INTEGER NOT NULL,
     replay_of_job_id TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS llm_call_logs (
+    id TEXT PRIMARY KEY,
+    agent_run_id TEXT NOT NULL,
+    prompt_version_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    schema_name TEXT,
+    input_tokens INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    duration_ms INTEGER NOT NULL,
+    estimated_cost_usd INTEGER NOT NULL,
+    retry_count INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (agent_run_id) REFERENCES agent_runs(id)
+  )`,
   `CREATE TABLE IF NOT EXISTS canon_facts (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,

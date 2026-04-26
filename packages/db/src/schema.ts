@@ -59,6 +59,23 @@ export const durableJobs = sqliteTable('durable_jobs', {
   replayOfJobId: text('replay_of_job_id')
 });
 
+export const llmCallLogs = sqliteTable('llm_call_logs', {
+  id: text('id').primaryKey(),
+  agentRunId: text('agent_run_id').notNull().references(() => agentRuns.id),
+  promptVersionId: text('prompt_version_id').notNull(),
+  provider: text('provider').notNull(),
+  model: text('model').notNull(),
+  schemaName: text('schema_name'),
+  inputTokens: integer('input_tokens').notNull(),
+  outputTokens: integer('output_tokens').notNull(),
+  durationMs: integer('duration_ms').notNull(),
+  estimatedCostUsd: integer('estimated_cost_usd').notNull(),
+  retryCount: integer('retry_count').notNull(),
+  status: text('status').notNull(),
+  error: text('error'),
+  createdAt: text('created_at').notNull()
+});
+
 export const canonFacts = sqliteTable('canon_facts', {
   id: text('id').primaryKey(),
   projectId: text('project_id').notNull().references(() => projects.id),

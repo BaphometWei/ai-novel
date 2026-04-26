@@ -10,7 +10,8 @@ export type EntityPrefix =
   | 'approval_request'
   | 'dependency'
   | 'foreshadowing'
-  | 'reader_promise';
+  | 'reader_promise'
+  | 'llm_call';
 
 export type EntityId<TPrefix extends EntityPrefix = EntityPrefix> = `${TPrefix}_${string}`;
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defineProviderAdapter, type ProviderAdapter } from './llm-gateway';
+import { createLlmCallRecord, defineProviderAdapter, type ProviderAdapter } from './llm-gateway';
 
 describe('ProviderAdapter contract', () => {
   it('supports text, structured output, streaming, embeddings, and cost estimation', async () => {
@@ -23,5 +23,32 @@ describe('ProviderAdapter contract', () => {
     })).resolves.toMatchObject({ value: { title: 'Chapter' } });
     await expect(adapter.embedText({ text: 'x' })).resolves.toMatchObject({ model: 'fake-embedding' });
     expect(adapter.estimateCost({ inputTokens: 1, outputTokens: 1 })).toEqual({ estimatedUsd: 0.01 });
+  });
+
+  it('creates durable LLM call records for observability persistence', () => {
+    const record = createLlmCallRecord({
+      agentRunId: 'agent_run_abc',
+      promptVersionId: 'prompt_v1',
+      provider: 'fake',
+      model: 'fake-model',
+      schemaName: 'ChapterPlan',
+      usage: { inputTokens: 100, outputTokens: 40 },
+      durationMs: 250,
+      estimatedCostUsd: 0.0014,
+      retryCount: 1,
+      status: 'Succeeded'
+    });
+
+    expect(record.id).toMatch(/^llm_call_/);
+    expect(record.createdAt).toMatch(/T/);
+    expect(record).toMatchObject({
+      agentRunId: 'agent_run_abc',
+      promptVersionId: 'prompt_v1',
+      provider: 'fake',
+      model: 'fake-model',
+      usage: { inputTokens: 100, outputTokens: 40 },
+      retryCount: 1,
+      status: 'Succeeded'
+    });
   });
 });
