@@ -1,6 +1,7 @@
 import { AppShell } from './components/AppShell';
 import { DecisionQueuePanel } from './components/DecisionQueuePanel';
 import { KnowledgeLibrary } from './components/KnowledgeLibrary';
+import { ManuscriptEditor } from './components/ManuscriptEditor';
 import { ObservabilityDashboard } from './components/ObservabilityDashboard';
 import { ProjectDashboard } from './components/ProjectDashboard';
 import { ReviewCenter } from './components/ReviewCenter';
@@ -12,6 +13,7 @@ export function App() {
   return (
     <AppShell>
       <ProjectDashboard />
+      <ManuscriptEditor />
       <StoryBible />
       <ReviewCenter />
       <SerializationDesk />

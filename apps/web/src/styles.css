@@ -1,6 +1,6 @@
 :root {
   color: #1e2329;
-  background: #f5f2ec;
+  background: #eef1f4;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -25,8 +25,8 @@ a {
 }
 
 .sidebar {
-  background: #20312d;
-  color: #f7f3ea;
+  background: #1f2a33;
+  color: #f6f8fb;
   display: flex;
   flex-direction: column;
   gap: 32px;
@@ -47,7 +47,7 @@ a {
 
 .brand-mark {
   align-items: center;
-  background: #d6b36a;
+  background: #8bc5d8;
   border-radius: 6px;
   color: #1e2329;
   display: inline-flex;
@@ -83,22 +83,28 @@ nav a:hover {
 }
 
 .dashboard-panel,
+.editor-panel,
 .decision-panel {
-  background: #fffaf1;
-  border: 1px solid #ded7c7;
+  background: #ffffff;
+  border: 1px solid #d7dee7;
   border-radius: 8px;
 }
 
-.dashboard-panel {
+.dashboard-panel,
+.editor-panel {
   display: grid;
   gap: 20px;
   padding: 22px;
 }
 
+.editor-panel {
+  grid-column: 1 / -1;
+}
+
 .workspace-header p,
 .status-tile span,
 .decision-panel p {
-  color: #687068;
+  color: #61717f;
 }
 
 .workspace-header p,
@@ -121,8 +127,8 @@ nav a:hover {
 }
 
 .status-tile {
-  background: #f4efe4;
-  border: 1px solid #e3d8c4;
+  background: #f2f6f8;
+  border: 1px solid #dae3eb;
   border-radius: 8px;
   display: grid;
   gap: 10px;
@@ -136,7 +142,7 @@ nav a:hover {
 }
 
 .work-surface {
-  border-top: 1px solid #ded7c7;
+  border-top: 1px solid #d7dee7;
   display: grid;
   gap: 10px;
   min-height: 240px;
@@ -144,10 +150,11 @@ nav a:hover {
 }
 
 .work-surface p {
-  color: #687068;
+  color: #61717f;
   margin: 0;
 }
 
+.story-bible,
 .panel-grid {
   display: grid;
   gap: 12px;
@@ -156,8 +163,8 @@ nav a:hover {
 }
 
 .surface-panel {
-  background: #fffaf1;
-  border: 1px solid #ded7c7;
+  background: #ffffff;
+  border: 1px solid #d7dee7;
   border-radius: 8px;
   display: grid;
   gap: 12px;
@@ -171,9 +178,13 @@ nav a:hover {
   margin: 0;
 }
 
+.surface-panel h2 {
+  font-size: 18px;
+}
+
 .surface-panel p,
 .compact-list dd {
-  color: #687068;
+  color: #61717f;
 }
 
 .panel-header {
@@ -187,8 +198,65 @@ nav a:hover {
 }
 
 .panel-header span {
-  color: #687068;
+  color: #61717f;
   font-size: 13px;
+}
+
+.manuscript-layout {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+}
+
+.chapter-tree {
+  display: grid;
+  gap: 8px;
+}
+
+.chapter-node {
+  background: #f6f8fb;
+  border: 1px solid #d7dee7;
+  border-radius: 8px;
+  color: #1e2329;
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  min-height: 62px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.chapter-node[aria-selected='true'] {
+  border-color: #2f6f86;
+  box-shadow: inset 3px 0 0 #2f6f86;
+}
+
+.chapter-node small {
+  color: #61717f;
+}
+
+.draft-surface {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.draft-editor {
+  background: #fbfcfd;
+  border: 1px solid #d7dee7;
+  border-radius: 8px;
+  line-height: 1.7;
+  min-height: 210px;
+  padding: 16px;
+}
+
+.context-inspector {
+  border-top: 1px solid #d7dee7;
+  padding-top: 12px;
+}
+
+.narrative-board {
+  min-height: 170px;
 }
 
 .review-finding {
@@ -203,10 +271,10 @@ nav a:hover {
 }
 
 .button-row button {
-  background: #20312d;
+  background: #1f2a33;
   border: 0;
   border-radius: 6px;
-  color: #fffaf1;
+  color: #ffffff;
   cursor: pointer;
   min-height: 34px;
   padding: 0 12px;
@@ -242,9 +310,9 @@ nav a:hover {
 
 .decision-panel span {
   align-items: center;
-  background: #20312d;
+  background: #1f2a33;
   border-radius: 999px;
-  color: #fffaf1;
+  color: #ffffff;
   display: inline-flex;
   font-size: 13px;
   font-weight: 700;
@@ -275,6 +343,8 @@ nav a:hover {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .manuscript-layout,
+  .story-bible,
   .panel-grid {
     grid-template-columns: 1fr;
   }
