@@ -39,7 +39,44 @@ export const agentRuns = sqliteTable('agent_runs', {
   taskType: text('task_type').notNull(),
   workflowType: text('workflow_type').notNull(),
   promptVersionId: text('prompt_version_id').notNull(),
-  contextPackId: text('context_pack_id').notNull(),
+  contextPackId: text('context_pack_id').notNull().references(() => contextPacks.id),
   status: text('status').notNull(),
   createdAt: text('created_at').notNull()
+});
+
+export const canonFacts = sqliteTable('canon_facts', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  text: text('text').notNull(),
+  status: text('status').notNull(),
+  sourceReferencesJson: text('source_references_json').notNull(),
+  confirmationTrailJson: text('confirmation_trail_json').notNull(),
+  ledgerJson: text('ledger_json').notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull()
+});
+
+export const approvalRequests = sqliteTable('approval_requests', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  targetType: text('target_type').notNull(),
+  targetId: text('target_id').notNull(),
+  riskLevel: text('risk_level').notNull(),
+  reason: text('reason').notNull(),
+  proposedAction: text('proposed_action').notNull(),
+  status: text('status').notNull(),
+  createdAt: text('created_at').notNull()
+});
+
+export const dependencyIndexEntries = sqliteTable('dependency_index_entries', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  sourceObjectJson: text('source_object_json').notNull(),
+  targetObjectJson: text('target_object_json').notNull(),
+  targetType: text('target_type').notNull(),
+  targetId: text('target_id').notNull(),
+  dependencyType: text('dependency_type').notNull(),
+  confidence: integer('confidence').notNull(),
+  sourceRunId: text('source_run_id').notNull(),
+  invalidationRule: text('invalidation_rule').notNull()
 });

@@ -43,6 +43,40 @@ const statements = [
     status TEXT NOT NULL,
     created_at TEXT NOT NULL,
     FOREIGN KEY (context_pack_id) REFERENCES context_packs(id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS canon_facts (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    status TEXT NOT NULL,
+    source_references_json TEXT NOT NULL,
+    confirmation_trail_json TEXT NOT NULL,
+    ledger_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS approval_requests (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    risk_level TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    proposed_action TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS dependency_index_entries (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    source_object_json TEXT NOT NULL,
+    target_object_json TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    dependency_type TEXT NOT NULL,
+    confidence INTEGER NOT NULL,
+    source_run_id TEXT NOT NULL,
+    invalidation_rule TEXT NOT NULL
   )`
 ];
 

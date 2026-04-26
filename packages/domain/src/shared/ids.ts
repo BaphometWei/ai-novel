@@ -7,6 +7,8 @@ export type EntityPrefix =
   | 'agent_run'
   | 'context_pack'
   | 'canon_fact'
+  | 'approval_request'
+  | 'dependency'
   | 'reader_promise';
 
 export type EntityId<TPrefix extends EntityPrefix = EntityPrefix> = `${TPrefix}_${string}`;

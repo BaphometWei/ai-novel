@@ -43,4 +43,20 @@ describe('agent run persistence', () => {
     });
     database.client.close();
   });
+
+  it('rejects agent runs that reference a missing context pack', async () => {
+    const database = createDatabase(':memory:');
+    await migrateDatabase(database.client);
+    const agentRuns = new AgentRunRepository(database.db);
+    const run = createAgentRun({
+      agentName: 'Writer Agent',
+      taskType: 'scene_draft',
+      workflowType: 'chapter_creation',
+      promptVersionId: 'prompt_v1',
+      contextPackId: 'context_pack_missing'
+    });
+
+    await expect(agentRuns.save(run)).rejects.toThrow();
+    database.client.close();
+  });
 });

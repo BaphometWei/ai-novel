@@ -30,4 +30,20 @@ describe('API app', () => {
     expect(getResponse.statusCode).toBe(200);
     expect(getResponse.json()).toMatchObject({ id: created.id, title: 'Long Night' });
   });
+
+  it('returns 400 for invalid project payloads', async () => {
+    const app = buildApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/projects',
+      payload: {
+        title: '',
+        language: 'zh-CN',
+        targetAudience: ''
+      }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: 'Invalid project payload' });
+  });
 });

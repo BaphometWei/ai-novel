@@ -15,4 +15,12 @@ describe('FilesystemArtifactStore', () => {
     await expect(store.readText(written.uri)).resolves.toBe('{"task":"draft"}');
     await rm(root, { recursive: true, force: true });
   });
+
+  it('rejects artifact uris that escape the store root', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ai-novel-artifacts-'));
+    const store = new FilesystemArtifactStore(root);
+
+    await expect(store.readText('../outside.txt')).rejects.toThrow('Artifact URI escapes store root');
+    await rm(root, { recursive: true, force: true });
+  });
 });

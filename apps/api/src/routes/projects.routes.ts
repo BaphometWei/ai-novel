@@ -10,8 +10,15 @@ const createProjectSchema = z.object({
 
 export function registerProjectRoutes(app: FastifyInstance, service = new ProjectService()) {
   app.post('/projects', async (request, reply) => {
-    const input = createProjectSchema.parse(request.body);
-    const project = service.create(input);
+    const parsed = createProjectSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'Invalid project payload',
+        issues: parsed.error.issues.map((issue) => ({ path: issue.path, message: issue.message }))
+      });
+    }
+
+    const project = service.create(parsed.data);
     return reply.code(201).send(project);
   });
 
