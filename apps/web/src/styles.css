@@ -148,6 +148,81 @@ nav a:hover {
   margin: 0;
 }
 
+.panel-grid {
+  display: grid;
+  gap: 12px;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.surface-panel {
+  background: #fffaf1;
+  border: 1px solid #ded7c7;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.surface-panel h2,
+.surface-panel h3,
+.surface-panel p,
+.compact-list {
+  margin: 0;
+}
+
+.surface-panel p,
+.compact-list dd {
+  color: #687068;
+}
+
+.panel-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.panel-header h2 {
+  font-size: 18px;
+}
+
+.panel-header span {
+  color: #687068;
+  font-size: 13px;
+}
+
+.review-finding {
+  display: grid;
+  gap: 10px;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.button-row button {
+  background: #20312d;
+  border: 0;
+  border-radius: 6px;
+  color: #fffaf1;
+  cursor: pointer;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.compact-list {
+  display: grid;
+  gap: 10px;
+}
+
+.compact-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .decision-panel {
   align-self: start;
   display: grid;
@@ -198,5 +273,9 @@ nav a:hover {
 
   .status-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .panel-grid {
+    grid-template-columns: 1fr;
   }
 }
