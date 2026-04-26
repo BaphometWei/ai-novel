@@ -1,5 +1,12 @@
 import { useState } from 'react';
-import { buildGenerationSourceContext, createKnowledgeItem, createSourcePolicy } from '@ai-novel/domain';
+import {
+  buildGenerationSourceContext,
+  canUseSourceFor,
+  createKnowledgeItem,
+  createSourcePolicy,
+  type KnowledgeItem,
+  type SourceUse
+} from '@ai-novel/domain';
 
 const ownedPolicy = createSourcePolicy({
   sourceType: 'user_note',
@@ -44,11 +51,26 @@ const knowledgeItems = [
   })
 ];
 
+function formatUses(uses: SourceUse[]): string {
+  return uses.length > 0 ? uses.join(', ') : 'none';
+}
+
+function getSourceStatus(item: KnowledgeItem, exclusionReason?: string): string {
+  if (exclusionReason) {
+    return item.kind === 'Sample' && canUseSourceFor(item.material.sourcePolicy, 'analysis')
+      ? 'Analysis-only sample'
+      : 'Excluded from generation context';
+  }
+
+  return 'Included in generation context';
+}
+
 export function KnowledgeLibrary() {
   const [sourceCheckCurrent, setSourceCheckCurrent] = useState(false);
   const generationContext = buildGenerationSourceContext(knowledgeItems);
-  const excludedIds = new Set(generationContext.exclusions.map((item) => item.knowledgeItemId));
-  const excludedItems = knowledgeItems.filter((item) => excludedIds.has(item.id));
+  const exclusionReasons = new Map(
+    generationContext.exclusions.map((item) => [item.knowledgeItemId, item.reason] as const)
+  );
 
   return (
     <section className="surface-panel" aria-labelledby="knowledge-title">
@@ -66,20 +88,58 @@ export function KnowledgeLibrary() {
           <dd>Restricted samples remain analysis-only.</dd>
         </div>
       </dl>
-      <ul className="compact-list">
-        {generationContext.included.map((item) => (
-          <li key={item.id}>Included: {item.title}</li>
-        ))}
-        {excludedItems.map((item) => {
-          const exclusion = generationContext.exclusions.find((entry) => entry.knowledgeItemId === item.id);
+      <div className="knowledge-list">
+        {knowledgeItems.map((item) => {
+          const policy = item.material.sourcePolicy;
+          const exclusionReason = exclusionReasons.get(item.id);
           return (
-            <li key={item.id}>
-              <span>Excluded: {item.title}</span>
-              <span>Reason: {exclusion?.reason}</span>
-            </li>
+            <article className="knowledge-item" aria-label={item.title} key={item.id}>
+              <header>
+                <div>
+                  <h3>{item.title}</h3>
+                  <span>{item.kind}</span>
+                </div>
+                <strong>{getSourceStatus(item, exclusionReason)}</strong>
+              </header>
+              <p>{item.material.extractedSummary}</p>
+              <dl className="policy-grid">
+                <div>
+                  <dt>Source</dt>
+                  <dd>Source: {policy.sourceType}</dd>
+                </div>
+                <div>
+                  <dt>Allowed</dt>
+                  <dd>Allowed: {formatUses(policy.allowedUse)}</dd>
+                </div>
+                <div>
+                  <dt>Prohibited</dt>
+                  <dd>Prohibited: {formatUses(policy.prohibitedUse)}</dd>
+                </div>
+                <div>
+                  <dt>Attribution</dt>
+                  <dd>Attribution: {policy.attributionRequirements}</dd>
+                </div>
+                <div>
+                  <dt>License</dt>
+                  <dd>License: {policy.licenseNotes}</dd>
+                </div>
+                <div>
+                  <dt>Risk</dt>
+                  <dd>Similarity risk: {policy.similarityRisk}</dd>
+                </div>
+              </dl>
+              {exclusionReason ? (
+                <p>
+                  <span>Excluded: {item.title}</span>
+                  <span>Reason: {exclusionReason}</span>
+                </p>
+              ) : (
+                <p>Included: {item.title}</p>
+              )}
+            </article>
           );
         })}
-      </ul>
+      </div>
       <div className="button-row">
         <button type="button" onClick={() => setSourceCheckCurrent(true)}>
           Run Source Check
