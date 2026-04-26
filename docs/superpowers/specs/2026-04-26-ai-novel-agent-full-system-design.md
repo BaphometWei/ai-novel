@@ -4,7 +4,7 @@ Date: 2026-04-26
 
 ## Purpose
 
-Build a full-featured AI novel creation system for Chinese long-form and web-novel authors. The product is a local Web writing workspace with an API-shaped modular monolith architecture. It supports multi-agent story development, long-form memory, structured sample and technique libraries, editorial review, automatic revision support, and serialization operations.
+Build a full-featured AI novel creation system for Chinese long-form and web-novel authors. The product is a local Web writing workspace with an API-shaped modular monolith architecture. It supports multi-agent story development, long-form memory, structured sample and technique libraries, agent-assisted authoring, editorial review, automatic revision support, and serialization operations.
 
 The system is not a generic chatbot and not a fully autonomous content mill. It is a professional writing workspace where the author remains the final creative authority. Agents can propose, draft, review, revise, summarize, and extract memory, but high-risk canon, plot, publishing, and source-policy decisions require user approval.
 
@@ -42,6 +42,8 @@ Architecture shape:
 - Review should preserve author voice and apply the smallest effective fix.
 - Serialization guidance should support long-term reader promises, not chase every short-term comment.
 - All high-risk changes enter a decision queue for user approval.
+- Agent capability must not be reduced by a simplified interface. The interface controls visibility, initiative, and timing; the underlying agent capabilities remain available through workflows, commands, and expert views.
+- Agent-authored prose is always a draft until the user accepts it. New facts created by agent-authored prose enter memory extraction and canon governance before becoming authoritative.
 
 ## System Layers
 
@@ -51,6 +53,7 @@ Architecture shape:
 - Manuscript editor.
 - Story bible.
 - Multi-agent writing workflows.
+- Agent-assisted authoring from local rewrites to full chapter drafts.
 - Sample, trope, technique, style, and genre libraries.
 - Review and revision.
 - Serialization operations.
@@ -59,6 +62,7 @@ Architecture shape:
 ### Intelligent Orchestration Layer
 
 - Workflow engine.
+- Creative Copilot Runtime.
 - Agent orchestrator.
 - Task contracts.
 - Context builder.
@@ -68,6 +72,7 @@ Architecture shape:
 - Review board.
 - Revision loop.
 - Memory extraction.
+- Authorship control.
 
 ### Governance Layer
 
@@ -78,6 +83,7 @@ Architecture shape:
 - Artifact store.
 - Event ledger.
 - Approval requests.
+- Attention and risk gates.
 - Data quality issues.
 - Evaluation harness.
 - Observability and cost tracking.
@@ -108,7 +114,10 @@ Important UX features:
 - Diff-based revision review.
 - Command palette for common actions.
 - Global search across manuscript, canon, samples, runs, review findings, and reader feedback.
-- User-selectable intelligence level: quiet, collaborative, or director mode.
+- Creative Copilot controls for initiative, execution depth, visibility, risk handling, and authorship level.
+- "Current most useful" side panel that changes by context: writing, review, canon work, publishing, blocking decisions, or deep debugging.
+- Command palette access to every major capability, including deep review, plot branch generation, character voice checks, canon candidate creation, context inspection, and chapter/title generation.
+- Agent authoring controls for local rewrite, continuation, scene draft, chapter draft, and director-style multi-step drafting.
 
 ## Domain Model
 
@@ -188,6 +197,9 @@ Canon facts must have a source and confirmation trail. High-risk canon changes r
 - TaskContract
 - PromptVersion
 - WorkflowDefinition
+- CopilotRuntimePolicy
+- AuthorshipSession
+- WritingContract
 - AgentRun
 - RunStep
 - ContextPack
@@ -197,6 +209,28 @@ Canon facts must have a source and confirmation trail. High-risk canon changes r
 - RunError
 - EvaluationCase
 - EvaluationResult
+
+CopilotRuntimePolicy records default behavior for a project or user:
+
+- Agent initiative level.
+- Execution depth.
+- UI visibility level.
+- Risk gate rules.
+- Attention budget.
+- Authorship defaults.
+- Cost budget.
+- User-specific interruption preferences.
+
+AuthorshipSession records each explicit agent-writing request:
+
+- Authorship level.
+- Target manuscript range.
+- Writing contract.
+- Context pack.
+- Generated draft artifacts.
+- Self-check and review artifacts.
+- User acceptance decisions.
+- Memory extraction results.
 
 Each AgentRun records:
 
@@ -325,6 +359,117 @@ After a chapter is finalized, a memory extraction workflow identifies:
 
 Risky updates enter the decision queue.
 
+## Creative Copilot Runtime
+
+Creative Copilot Runtime is the system-level coordinator that decides when agent capabilities run, how deeply they run, how much of their output is shown, and when the user must be interrupted.
+
+It exists to keep the full agent system usable in real writing sessions. A simplified writing surface must not mean weaker agents. It only means the runtime chooses the right moment and level of disclosure.
+
+Runtime dimensions:
+
+- Intent: what the author is doing now, such as free writing, blocked writing, rewriting, review, canon work, outline planning, publish preparation, or reader feedback review.
+- Initiative: quiet, collaborative, or director.
+- Execution depth: quick, standard, or deep.
+- Visibility: compact, full, or expert.
+- Risk: low, medium, high, or blocking.
+- Authorship level: author-led, local co-writing, scene draft, chapter draft, or director takeover.
+
+Example runtime combinations:
+
+- Free writing plus quiet initiative plus deep execution plus compact visibility means agents may run strong background checks, but only high-risk problems interrupt the author.
+- Review plus collaborative initiative plus deep execution plus full visibility means the system shows detailed findings, evidence, revision suggestions, and diffs.
+- Publish preparation always elevates blocking risks into visible publish checks, regardless of quiet mode.
+- Blocked writing plus director initiative plus deep execution means planning, scene design, drafting, review, and revision can run as a guided workflow.
+
+Runtime responsibilities:
+
+- Detect the current writing context from screen, selection, workflow, manuscript state, and user command.
+- Decide which agents should run and whether they run now, after a pause, at chapter end, or on explicit command.
+- Apply attention budgets so low-value suggestions do not interrupt flow.
+- Route high-risk outputs to the decision queue.
+- Keep medium-risk findings in the side panel or review report.
+- Keep low-risk observations in logs or folded reports.
+- Preserve access to all strong capabilities through command palette, workflow entry points, and expert views.
+- Explain visible suggestions through citations, risk, agent source, and context-pack references.
+- Learn user preferences such as "do not interrupt while drafting," "always warn on character voice drift," or "ask before cost exceeds a configured budget."
+
+High-risk or blocking events must be visible in every mode:
+
+- Canon conflict.
+- Character death.
+- Main plot redirection.
+- World-rule change.
+- Source-policy violation.
+- External publication readiness failure.
+- Cost or context budget breach.
+- Agent writing contract failure.
+
+## Authorship Control
+
+Authorship Control defines who leads the current prose and how much drafting authority the agent has. It is part of Creative Copilot Runtime and is a first-class product capability.
+
+Authorship levels:
+
+- A0 Author-led: the author writes; agents run background checks, lightweight suggestions, and requested actions.
+- A1 Local co-writing: the author selects text or a cursor location; the agent rewrites, continues, strengthens dialogue, adds description, or adjusts tone.
+- A2 Scene draft: the agent writes a complete scene from a scene goal, involved characters, conflict, required information, emotional movement, word range, style, and constraints.
+- A3 Chapter draft: the agent writes a full chapter from chapter goals, scene list, reader promise, previous-chapter payoff, foreshadowing requirements, style profile, and next-chapter hook.
+- A4 Director takeover: the agent plans, drafts, self-checks, reviews, and revises a bounded manuscript range, stopping for high-risk decisions or contract failure.
+
+Agent-written prose rules:
+
+- Agent output is a draft artifact until accepted by the user.
+- The system never silently overwrites final manuscript text.
+- The user can accept, reject, compare, or partially accept generated text.
+- Local accepted fragments can include dialogue lines, action beats, transitions, emotional direction, or scene structure without accepting the full draft.
+- New facts introduced by agent prose are extracted as Candidate memory unless explicitly confirmed.
+- A4 director takeover has explicit stopping conditions and cost limits.
+
+Every A1-A4 request creates a WritingContract before prose generation.
+
+WritingContract includes:
+
+- Target range and authorship level.
+- What must be written.
+- Required canon constraints.
+- Required plot movement.
+- Required character change or emotional movement.
+- Required information, payoff, foreshadowing, or hook.
+- Style and voice constraints.
+- Word range.
+- Forbidden changes.
+- Source-policy constraints.
+- Stop conditions.
+- Cost and iteration budget.
+
+Agent authoring pipeline:
+
+1. Create writing request.
+2. Build task-specific context pack.
+3. Generate WritingContract.
+4. User confirms, edits, or skips confirmation depending on configured authorship level.
+5. Generate draft artifact.
+6. Run self-check against the WritingContract.
+7. Run review and continuity checks.
+8. Generate revision suggestions or revised draft.
+9. Present diff and acceptance controls.
+10. Extract candidate memory from accepted text.
+11. Route risky memory changes to approval.
+
+Acceptability checks:
+
+- Contract completion.
+- Canon compliance.
+- Character voice match.
+- Style match.
+- Reader-contract fit.
+- No unapproved high-risk fact.
+- No forbidden source use.
+- No unresolved blocking review finding.
+- Worthiness as a manuscript candidate.
+
+Multi-candidate drafting is supported but bounded. Default candidate count should be two or three, such as conservative, conflict-intensified, emotional, suspense, or payoff-focused variants.
+
 ## Agent Operating System
 
 Agents are controlled role modules inside workflows, not unconstrained chat personas.
@@ -349,6 +494,7 @@ Agent operating rules:
 - Agents receive scoped context packs, not unrestricted database access.
 - Agents output typed artifacts.
 - Agents can propose changes but cannot silently change canon.
+- Agents can draft prose when the user chooses an authorship level that permits drafting.
 - High-risk changes require approval.
 - Agent runs are saved as run graphs.
 - Agent outputs are validated against schemas.
@@ -374,16 +520,32 @@ Risk levels:
 ### Chapter Creation
 
 1. Select chapter location.
-2. Context Builder creates task-specific context.
-3. Planner Agent confirms chapter goal.
-4. Scene Designer Agent creates scene beats.
-5. Writer Agent drafts scenes.
-6. Review board checks continuity, structure, voice, style, and serialization fit.
-7. Writer Agent produces revisions.
-8. User reviews diffs and approves final text.
-9. Memory Curator extracts candidate updates.
-10. User approves high-risk memory changes.
-11. Serialization Agent prepares title, hook, preview, and next-chapter strategy.
+2. Creative Copilot Runtime identifies intent and authorship level.
+3. Context Builder creates task-specific context.
+4. Planner Agent confirms chapter goal.
+5. Scene Designer Agent creates scene beats.
+6. Writer Agent drafts scenes when the selected authorship level permits agent drafting.
+7. Review board checks continuity, structure, voice, style, and serialization fit.
+8. Writer Agent produces revisions.
+9. User reviews diffs and approves final text or selected fragments.
+10. Memory Curator extracts candidate updates from accepted text.
+11. User approves high-risk memory changes.
+12. Serialization Agent prepares title, hook, preview, and next-chapter strategy.
+
+### Agent-Assisted Authoring
+
+1. User selects authorship level A1, A2, A3, or A4.
+2. User specifies the writing target, or the runtime infers it from selection and current workflow.
+3. Context Builder gathers canon, recent summaries, scene or chapter goals, character voices, reader contract, style profile, and negative memory.
+4. System creates a WritingContract.
+5. User confirms or edits the contract when risk or configuration requires it.
+6. Writer Agent generates draft artifacts.
+7. Voice Director, Lore Keeper, and Editor Agents check the draft.
+8. System either revises automatically within safe limits or presents findings and diffs.
+9. User accepts, rejects, partially accepts, or asks for another candidate.
+10. Accepted prose becomes a new manuscript version.
+11. Memory Curator extracts candidate facts from accepted prose only.
+12. High-risk facts enter the decision queue before becoming canon.
 
 ### Review and Revision
 
@@ -416,6 +578,7 @@ Context pack sections:
 - Agent role.
 - Output schema.
 - Risk level.
+- Authorship level and WritingContract when the task generates prose.
 - Current project, volume, chapter, and scene.
 - Relevant canon constraints.
 - Character states.
@@ -641,6 +804,8 @@ Main modules:
 - memory
 - knowledge
 - agents
+- copilot_runtime
+- authoring
 - workflow
 - retrieval
 - review
@@ -801,6 +966,8 @@ Agent workflow phase:
 
 - Chief Editor, Planner, Lore Keeper, Writer, Editor, Memory Curator.
 - Task contracts.
+- Creative Copilot Runtime.
+- Authorship Control and WritingContract.
 - Run graph.
 - Durable job worker.
 - Schema validation.
@@ -860,7 +1027,11 @@ The system design is acceptable if it supports:
 - Creating and managing a long-form novel project.
 - Maintaining project memory with canon governance.
 - Running multi-agent workflows with replayable runs.
+- Running Creative Copilot Runtime so strong agent capabilities are available without overwhelming the writing surface.
+- Supporting authorship levels from author-led writing to local co-writing, scene drafting, chapter drafting, and bounded director takeover.
+- Creating WritingContracts for agent-authored prose and checking draft output against them.
 - Writing and revising chapters using task-specific context.
+- Accepting, rejecting, or partially accepting agent-authored prose through versioned drafts and diffs.
 - Tracking samples, techniques, style profiles, and source policies.
 - Reviewing chapters with evidence-backed findings.
 - Applying controlled revisions with diff and recheck.
