@@ -1,1 +1,11 @@
 .superpowers/
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+.env
+.env.local
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
