@@ -80,3 +80,53 @@ export const dependencyIndexEntries = sqliteTable('dependency_index_entries', {
   sourceRunId: text('source_run_id').notNull(),
   invalidationRule: text('invalidation_rule').notNull()
 });
+
+export const reviewReports = sqliteTable('review_reports', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull().references(() => projects.id),
+  manuscriptVersionId: text('manuscript_version_id').notNull(),
+  profileJson: text('profile_json').notNull(),
+  findingsJson: text('findings_json').notNull(),
+  qualityScoreJson: text('quality_score_json').notNull(),
+  openFindingCount: integer('open_finding_count').notNull()
+});
+
+export const revisionSuggestions = sqliteTable('revision_suggestions', {
+  id: text('id').primaryKey(),
+  findingId: text('finding_id').notNull(),
+  manuscriptVersionId: text('manuscript_version_id').notNull(),
+  title: text('title').notNull(),
+  rationale: text('rationale').notNull(),
+  diffJson: text('diff_json').notNull(),
+  risk: text('risk').notNull(),
+  status: text('status').notNull()
+});
+
+export const serializationPlans = sqliteTable('serialization_plans', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull().references(() => projects.id),
+  platformProfileJson: text('platform_profile_json').notNull(),
+  updateScheduleJson: text('update_schedule_json').notNull(),
+  experimentsJson: text('experiments_json').notNull()
+});
+
+export const readerFeedbackRows = sqliteTable('reader_feedback', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull().references(() => projects.id),
+  chapterId: text('chapter_id').notNull(),
+  segment: text('segment').notNull(),
+  sentiment: text('sentiment').notNull(),
+  tagsJson: text('tags_json').notNull(),
+  body: text('body').notNull()
+});
+
+export const knowledgeItems = sqliteTable('knowledge_items', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull().references(() => projects.id),
+  title: text('title').notNull(),
+  kind: text('kind').notNull(),
+  lifecycleStatus: text('lifecycle_status').notNull(),
+  materialJson: text('material_json').notNull(),
+  tagsJson: text('tags_json').notNull(),
+  embeddingsJson: text('embeddings_json').notNull()
+});

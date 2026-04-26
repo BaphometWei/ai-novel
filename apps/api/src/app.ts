@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import { registerProjectRoutes } from './routes/projects.routes';
+import { registerWorkbenchRoutes } from './routes/workbench.routes';
 
 export function buildApp() {
   const app = Fastify({ logger: false });
@@ -10,6 +11,7 @@ export function buildApp() {
   }));
 
   registerProjectRoutes(app);
+  registerWorkbenchRoutes(app);
 
   return app;
 }

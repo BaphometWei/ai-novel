@@ -87,6 +87,55 @@ const statements = [
     source_type UNINDEXED,
     title,
     body
+  )`,
+  `CREATE TABLE IF NOT EXISTS review_reports (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    manuscript_version_id TEXT NOT NULL,
+    profile_json TEXT NOT NULL,
+    findings_json TEXT NOT NULL,
+    quality_score_json TEXT NOT NULL,
+    open_finding_count INTEGER NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS revision_suggestions (
+    id TEXT PRIMARY KEY,
+    finding_id TEXT NOT NULL,
+    manuscript_version_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    rationale TEXT NOT NULL,
+    diff_json TEXT NOT NULL,
+    risk TEXT NOT NULL,
+    status TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS serialization_plans (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    platform_profile_json TEXT NOT NULL,
+    update_schedule_json TEXT NOT NULL,
+    experiments_json TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS reader_feedback (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    chapter_id TEXT NOT NULL,
+    segment TEXT NOT NULL,
+    sentiment TEXT NOT NULL,
+    tags_json TEXT NOT NULL,
+    body TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS knowledge_items (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    lifecycle_status TEXT NOT NULL,
+    material_json TEXT NOT NULL,
+    tags_json TEXT NOT NULL,
+    embeddings_json TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
   )`
 ];
 

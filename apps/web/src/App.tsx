@@ -1,6 +1,7 @@
 import { AppShell } from './components/AppShell';
 import { DecisionQueuePanel } from './components/DecisionQueuePanel';
 import { KnowledgeLibrary } from './components/KnowledgeLibrary';
+import { ObservabilityDashboard } from './components/ObservabilityDashboard';
 import { ProjectDashboard } from './components/ProjectDashboard';
 import { ReviewCenter } from './components/ReviewCenter';
 import { SerializationDesk } from './components/SerializationDesk';
@@ -15,6 +16,7 @@ export function App() {
       <ReviewCenter />
       <SerializationDesk />
       <KnowledgeLibrary />
+      <ObservabilityDashboard />
       <DecisionQueuePanel />
     </AppShell>
   );

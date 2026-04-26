@@ -2,6 +2,7 @@ export * from './agents/agent-run';
 export * from './agents/context-pack';
 export * from './agents/llm-gateway';
 export * from './artifact/artifact';
+export * from './import-export/import-export';
 export * from './memory/approvals';
 export * from './memory/canon';
 export * from './knowledge/knowledge';

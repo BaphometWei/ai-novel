@@ -10,5 +10,6 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: 'AI Novel Workspace' })).toBeInTheDocument();
     expect(screen.getByText('Decision Queue')).toBeInTheDocument();
     expect(screen.getByText('Current Project')).toBeInTheDocument();
+    expect(screen.getByText('Observability')).toBeInTheDocument();
   });
 });
