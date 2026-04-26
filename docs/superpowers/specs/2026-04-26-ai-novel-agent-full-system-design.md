@@ -38,6 +38,8 @@ Architecture shape:
 - Long-form continuity is the main product value.
 - Canon must be governed, not inferred casually.
 - Foreshadowing is a tracked reader promise, not just a note. The system must help authors preserve, reinforce, pay off, transform, delay, or abandon promises deliberately.
+- Secrets, character arcs, time, location, causality, world rules, branch simulations, and ending closure must be tracked as long-form systems, not scattered notes.
+- Goals and idea capture are required capabilities, but they should be merged into runtime policy, review profiles, serialization strategy, knowledge intake, and project memory rather than becoming separate top-level systems.
 - Every agent run must be traceable through input, context, prompt version, output, cost, and user adoption.
 - Samples are structured craft knowledge, not a raw imitation warehouse.
 - Review should preserve author voice and apply the smallest effective fix.
@@ -54,6 +56,7 @@ Architecture shape:
 - Manuscript editor.
 - Story bible.
 - Foreshadowing and reader-promise board.
+- Secrets, character arcs, timeline, world rules, branches, impact analysis, and ending closure workspaces.
 - Multi-agent writing workflows.
 - Agent-assisted authoring from local rewrites to full chapter drafts.
 - Sample, trope, technique, style, and genre libraries.
@@ -70,6 +73,8 @@ Architecture shape:
 - Context builder.
 - Retrieval engine.
 - Foreshadowing health and payoff-window detection.
+- Narrative dependency index.
+- Reveal, arc, causality, rule, branch, retcon, and closure engines.
 - LLM gateway.
 - Quality evaluation.
 - Review board.
@@ -82,6 +87,7 @@ Architecture shape:
 - Canon ledger.
 - Memory status transitions.
 - Reader-promise lifecycle and risk governance.
+- Knowledge boundary, arc, causality, rule, retcon, branch, and closure governance.
 - Source and rights policy.
 - Prompt and run versioning.
 - Artifact store.
@@ -100,7 +106,7 @@ Primary screens:
 
 - Project Dashboard: progress, current chapter, risks, decisions, open conflicts, upcoming serialization tasks.
 - Manuscript Editor: chapter tree, scene beats, rich text editor, inline review findings, agent actions, version comparison.
-- Story Bible: characters, factions, world rules, locations, timeline, plotlines, foreshadowing, reader promises, canon ledger.
+- Story Bible: characters, factions, world rules, locations, timeline, causality, plotlines, secrets, character arcs, foreshadowing, reader promises, canon ledger.
 - Agent Room: run workflows, inspect context packs, compare agent outputs, review run graphs, approve memory changes.
 - Knowledge Library: samples, tropes, techniques, genre rules, style profiles, review rules, source policies.
 - Review Center: findings, quality scores, revision plans, false-positive handling, recurring issue trends.
@@ -115,6 +121,7 @@ Important UX features:
 - Context inspector showing exactly what memory and samples each agent used.
 - Story maps for timeline, relationship graph, faction graph, foreshadowing board, emotional arc, and chapter hook distribution.
 - Foreshadowing board with simple user-facing states: pending confirmation, active, ready for payoff, resolved, problem, and parked.
+- Secret/reveal board, character arc board, timeline/causality map, world rule map, branch sandbox, change impact panel, and ending closure dashboard.
 - Inline editorial comments with one-click apply, reject, ask why, or convert to task.
 - Diff-based revision review.
 - Command palette for common actions.
@@ -146,10 +153,21 @@ Important UX features:
 - CharacterState
 - CharacterVoiceProfile
 - CharacterRelationship
+- CharacterArc
+- MotivationState
+- BeliefState
+- RelationshipArc
+- RelationshipTurningPoint
 - Faction
 - WorldItem
 - Location
+- LocationState
 - PowerSystemRule
+- WorldRule
+- RuleConstraint
+- RuleException
+- AbilityCost
+- AbilityLimit
 - EntityAlias
 - EntityMention
 - EntityLink
@@ -164,10 +182,26 @@ Important UX features:
 - PromiseHealthAssessment
 - PayoffPlan
 - PayoffReview
+- Secret
+- KnowledgeState
+- RevealPlan
+- RevealEvent
+- Misinformation
 - TimelineEvent
+- DurationConstraint
+- CausalLink
+- Deadline
+- ConcurrentEvent
 - NarrativeState
 - ReaderContract
 - EmotionalArcPoint
+- BranchScenario
+- BranchDiff
+- ScenarioProjection
+- ClosureChecklist
+- FinalArcPlan
+- ClosureItem
+- NarrativeDependency
 
 ### Memory Governance Entities
 
@@ -180,6 +214,11 @@ Important UX features:
 - SourceReference
 - Scope
 - DataQualityIssue
+- DependencyIndexEntry
+- DependencyInvalidation
+- ImpactReport
+- RetconPlan
+- RegressionCheck
 
 Memory statuses:
 
@@ -210,6 +249,9 @@ Canon facts must have a source and confirmation trail. High-risk canon changes r
 - CopilotRuntimePolicy
 - AuthorshipSession
 - WritingContract
+- ScenarioSimulationRun
+- ChangeImpactRun
+- ClosureRun
 - AgentRun
 - RunStep
 - ContextPack
@@ -260,6 +302,8 @@ Each AgentRun records:
 ### Knowledge Library Entities
 
 - KnowledgeItem
+- IdeaItem
+- QuickCapture
 - Material
 - Sample
 - Trope
@@ -275,6 +319,8 @@ Each AgentRun records:
 - Tag
 - AntiPattern
 - StyleExperiment
+
+IdeaItem and QuickCapture belong to the knowledge and project-memory intake flow, not to a separate top-level system. They store raw inspiration, snippets, scene ideas, character ideas, research leads, and possible plot material without making them canon or reader promises.
 
 SourcePolicy records:
 
@@ -301,6 +347,12 @@ SourcePolicy records:
 - ReaderSegment
 - PlatformProfile
 - SerializationExperiment
+- ProjectGoal
+- SuccessCriteria
+- ForbiddenDirection
+- AuthorPreference
+
+Project goals and success criteria belong to project settings, Creative Copilot Runtime policy, review profiles, and serialization strategy. They should guide all agent judgments without becoming a separate top-level system.
 
 ## Storage Rules
 
@@ -309,6 +361,7 @@ SourcePolicy records:
 - Every artifact has a type, hash, source, version, and related run.
 - Vector indexes store embeddings and references only. They are not the source of truth.
 - Full-text indexes support precise lookup for names, terms, dialogue, comments, and findings.
+- Narrative dependency indexes support impact analysis across canon, chapters, secrets, reader promises, character arcs, timelines, world rules, branch scenarios, and ending closure items.
 - Important entities use soft delete or tombstones, not hard delete.
 - Import batches are tracked so bad imports can be rolled back or reprocessed.
 - A portable project bundle supports backup, restore, and migration.
@@ -323,6 +376,9 @@ Common database invariants:
 - EmbeddingRecord must record embedding model and version.
 - SourcePolicy must participate in sample retrieval.
 - High-risk changes must have an ApprovalRequest.
+- DependencyIndexEntry must reference a source object, target object, dependency type, and confidence.
+- BranchScenario outputs must remain isolated from canon until explicitly adopted.
+- RetconPlan changes must create impact reports and regression checks before they affect accepted manuscript versions.
 
 ## Memory System
 
@@ -337,6 +393,10 @@ It stores:
 - Character states.
 - Character voices.
 - Timeline events.
+- Secrets and knowledge boundaries.
+- Character arcs and relationship arcs.
+- Location and causality constraints.
+- World rules, powers, costs, limits, and exceptions.
 - Open and paid-off foreshadowing.
 - Reader promises.
 - Emotional arcs.
@@ -361,6 +421,7 @@ After a chapter is finalized, a memory extraction workflow identifies:
 - Changed character states.
 - Relationship changes.
 - New or resolved foreshadowing.
+- New or changed secrets, reveals, character arcs, causal links, world rules, and closure items.
 - Timeline updates.
 - Worldbuilding changes.
 - Potential conflicts.
@@ -509,6 +570,273 @@ Payoff quality review checks:
 - Did it introduce a new promise that should be tracked?
 - Was the payoff too small, too large, too early, or too late for its level and strength?
 
+## Secrets, Knowledge Boundary, and Reveal System
+
+This system tracks who knows what, who misunderstands what, what the reader knows, and when secrets should be revealed. It is separate from reader-promise tracking: reader promises track what the story owes the reader; knowledge boundaries track information access inside the story world.
+
+It stores:
+
+- Secrets and hidden truths.
+- Reader knowledge state.
+- Character knowledge state.
+- False beliefs and misinformation.
+- Reveal plans.
+- Actual reveal events.
+- Knowledge-boundary violations.
+
+Core questions:
+
+- Does this character know enough to say or do this?
+- Has the reader been told this already?
+- Is this reveal too early, too late, or unsupported?
+- Is an intentional misunderstanding still active?
+- Did a revision accidentally leak a secret?
+
+Runtime behavior:
+
+- Writer Agent receives knowledge boundaries before drafting dialogue, investigation scenes, betrayals, reveals, and misunderstandings.
+- Review checks whether a character uses information they should not have.
+- Planner can schedule partial reveals, false reveals, full reveals, and delayed reveals.
+- Serialization can treat high-value secrets as reader-retention assets without allowing short-term comments to override the reveal plan.
+
+User-facing UI should remain simple:
+
+- Secret.
+- Who knows.
+- Who misunderstands.
+- Reveal target.
+- Reveal status.
+- Risk.
+
+## Character Arc, Motivation, and Relationship System
+
+This system tracks dynamic character change rather than static character facts. It prevents long-form drift where characters revert, change without cause, or relationships move without earned transitions.
+
+It stores:
+
+- Current character goals.
+- Motivation state.
+- Belief state.
+- Arc stage.
+- Emotional pressure.
+- Relationship state.
+- Trust, hostility, dependence, debt, intimacy, rivalry, or loyalty markers.
+- Turning points and unresolved relationship beats.
+
+Core questions:
+
+- What does this character want right now?
+- Why would they act this way?
+- What belief or wound is being challenged?
+- Has the relationship earned this new level of trust, conflict, or intimacy?
+- Is this dialogue consistent with both character voice and current relationship state?
+
+Runtime behavior:
+
+- Context Builder retrieves current arc and relationship state for scenes involving relevant characters.
+- Voice Director checks dialogue against current relationship, not just personality.
+- Review checks OOC behavior, unearned emotional shifts, and missing turning points.
+- Planner uses unresolved arc pressure as story fuel.
+- Ending closure checks whether major arcs and relationships resolve, transform, or intentionally remain open.
+
+## Timeline, Location, and Causality System
+
+This system tracks whether events can happen when and where the story says they happen. It covers time, travel, duration, concurrency, deadlines, and causal dependencies.
+
+It stores:
+
+- Timeline events.
+- Chapter and scene time positions.
+- Duration constraints.
+- Location states.
+- Travel or transition requirements.
+- Causal links.
+- Deadlines.
+- Concurrent events.
+
+Core questions:
+
+- Can this character be here at this time?
+- Did enough time pass for travel, healing, training, investigation, or political change?
+- Did the cause happen before the effect?
+- Does this event violate a known deadline?
+- Did a revision break later timing?
+
+Runtime behavior:
+
+- Writing workflows receive current time and location constraints.
+- Review checks impossible appearances, missing travel time, inconsistent ages, and broken cause-effect chains.
+- Change impact uses causal links to find downstream chapters affected by edits.
+- Branch sandbox uses timeline constraints when projecting alternate paths.
+
+## World Rule, Power, and Constraint System
+
+This system tracks hard and soft rules for worldbuilding, magic, cultivation, technology, game systems, law, institutions, and power mechanics. It exists because genre stories often fail when rules become convenient instead of consistent.
+
+It stores:
+
+- World rules.
+- Ability and power rules.
+- Levels or progression rules.
+- Limits.
+- Costs.
+- Cooldowns.
+- Resources.
+- Counter-rules.
+- Exceptions.
+- Rule confidence and source.
+
+Core questions:
+
+- Can this ability be used here?
+- What does it cost?
+- Is the cooldown or resource constraint respected?
+- Does this exception need canon approval?
+- Does a new scene weaken the world's rules?
+
+Runtime behavior:
+
+- Battle, investigation, system, science, legal, and cultivation scenes receive relevant constraints.
+- Review checks rule breaks and unapproved exceptions.
+- Planner can propose rule-based solutions, but high-impact exceptions enter approval.
+- Change impact rechecks scenes affected by rule changes.
+
+## Narrative Dependency Index
+
+Narrative Dependency Index is a bottom-layer support system, not a user-facing workspace. It records how story objects depend on each other so the system can explain, retrieve, and recheck consequences.
+
+It links:
+
+- Chapters to canon facts.
+- Scenes to character arcs.
+- Reveals to secrets.
+- Payoffs to reader promises.
+- Battles to world rules.
+- Relationship turns to prior events.
+- Timeline events to causes.
+- Ending closure items to unresolved arcs, promises, and rules.
+
+Dependency records include:
+
+- Source object.
+- Target object.
+- Dependency type.
+- Confidence.
+- Source run or user action.
+- Invalidation rules.
+
+This index powers retrieval, change impact, retcon planning, regression checks, and context inspection.
+
+## Change Impact, Retcon, and Regression System
+
+This system answers the question: if earlier material changes, what later material is affected? It is not just version history. It is consequence analysis for long fiction.
+
+It handles:
+
+- Chapter rewrites.
+- Deleted or merged characters.
+- Moved reveals.
+- Changed motivations.
+- Changed world rules.
+- Changed payoff answers.
+- Reordered timeline events.
+
+Workflow:
+
+1. User proposes or applies a change.
+2. System builds an impact report from the dependency index.
+3. Affected chapters, promises, secrets, arcs, rules, and timeline events are listed.
+4. System suggests a retcon plan or regression checks.
+5. User decides which changes to apply.
+6. Regression checks run after accepted edits.
+
+Risk gates:
+
+- High-impact retcons must not silently update canon.
+- Accepted retcons must create new manuscript versions.
+- Affected future chapters should receive recheck tasks.
+
+## Branch Sandbox and Scenario Simulation System
+
+Branch Sandbox lets the author explore possible story directions without contaminating canon, current manuscript, or project memory.
+
+It stores:
+
+- Scenario premise.
+- Branch differences from mainline.
+- Projected scenes or chapters.
+- Impact report.
+- Pros and cons.
+- Adoption decision.
+- Partial adoption records.
+
+Typical questions:
+
+- What if the antagonist survives this arc?
+- What if the heroine learns the truth now?
+- What if the protagonist loses this battle?
+- What if a payoff is delayed to the next volume?
+
+Runtime behavior:
+
+- Planner generates bounded projections.
+- Change Impact estimates adoption cost.
+- Review checks whether the branch fits goals, reader contract, canon constraints, and serialized pacing.
+- Branch artifacts remain isolated until the user adopts them.
+
+## Ending, Closure, and Final Payoff System
+
+This system helps long works close deliberately. It activates when the author enters a final volume, requests ending planning, or the system detects enough main arcs approaching resolution.
+
+It tracks:
+
+- Main plot closure.
+- Antagonist closure.
+- Character arc closure.
+- Relationship closure.
+- Reader-promise and foreshadowing closure.
+- Secret/reveal closure.
+- World-state closure.
+- Epilogue or side-story needs.
+
+Closure checks:
+
+- Are core promises resolved, transformed, or intentionally left open?
+- Does the protagonist's final state answer the story's starting tension?
+- Does the antagonist resolution fit the reader contract?
+- Are major rules and world consequences respected?
+- Do important relationships receive closure proportional to their role?
+- Does the ending satisfy the project goals and reader contract?
+
+Runtime behavior:
+
+- Planner and Chief Editor propose ending shapes.
+- Promise, secret, arc, timeline, and rule systems provide unresolved items.
+- Review evaluates whether the ending is rushed, over-explained, underpaid, or inconsistent.
+- Serialization can plan final-volume pacing and post-ending material.
+
+## Merged Capabilities
+
+The following capabilities are required but should not become separate top-level systems.
+
+Goal and Success Criteria belong to:
+
+- Project settings.
+- ReaderContract.
+- Creative Copilot Runtime policy.
+- ReviewProfile.
+- Serialization strategy.
+
+They define target audience, target length, genre promise, commercial or personal goals, forbidden directions, and success criteria. All agents should use them as judgment standards.
+
+Idea Inbox and Material Capture belong to:
+
+- Knowledge Library.
+- Project Memory intake.
+- Creative Copilot Runtime command palette.
+
+They provide quick capture for dialogue, dreams, scene ideas, research leads, character ideas, setting ideas, and plot fragments. Captured ideas remain non-canon until promoted.
+
 ## Creative Copilot Runtime
 
 Creative Copilot Runtime is the system-level coordinator that decides when agent capabilities run, how deeply they run, how much of their output is shown, and when the user must be interrupted.
@@ -554,6 +882,8 @@ High-risk or blocking events must be visible in every mode:
 - Cost or context budget breach.
 - Agent writing contract failure.
 - Core reader-promise conflict or accidental payoff failure near publication.
+- Knowledge-boundary violation in a reveal or deception scene.
+- High-impact character arc reversal, timeline contradiction, world-rule exception, branch adoption, retcon, or ending closure failure.
 
 ## Authorship Control
 
@@ -672,7 +1002,7 @@ Risk levels:
 
 1. Select chapter location.
 2. Creative Copilot Runtime identifies intent and authorship level.
-3. Context Builder creates task-specific context.
+3. Context Builder creates task-specific context, including relevant secrets, arcs, timeline, location, rules, reader promises, and dependency warnings.
 4. Planner Agent confirms chapter goal.
 5. Scene Designer Agent creates scene beats.
 6. Writer Agent drafts scenes when the selected authorship level permits agent drafting.
@@ -680,15 +1010,16 @@ Risk levels:
 8. Writer Agent produces revisions.
 9. User reviews diffs and approves final text or selected fragments.
 10. Promise tracking identifies new, reinforced, resolved, or risky reader promises.
-11. Memory Curator extracts candidate updates from accepted text.
-12. User approves high-risk memory and reader-promise changes.
-13. Serialization Agent prepares title, hook, preview, and next-chapter strategy.
+11. Specialized systems identify changed secrets, knowledge states, arcs, timeline events, causal links, world rules, and dependency entries.
+12. Memory Curator extracts candidate updates from accepted text.
+13. User approves high-risk memory, reader-promise, reveal, arc, timeline, rule, and dependency changes.
+14. Serialization Agent prepares title, hook, preview, and next-chapter strategy.
 
 ### Agent-Assisted Authoring
 
 1. User selects authorship level A1, A2, A3, or A4.
 2. User specifies the writing target, or the runtime infers it from selection and current workflow.
-3. Context Builder gathers canon, recent summaries, scene or chapter goals, character voices, reader contract, style profile, and negative memory.
+3. Context Builder gathers canon, recent summaries, scene or chapter goals, character voices, relationship state, reader contract, secrets, timeline, world rules, reader promises, style profile, and negative memory.
 4. System creates a WritingContract.
 5. User confirms or edits the contract when risk or configuration requires it.
 6. Writer Agent generates draft artifacts.
@@ -697,8 +1028,9 @@ Risk levels:
 9. User accepts, rejects, partially accepts, or asks for another candidate.
 10. Accepted prose becomes a new manuscript version.
 11. Promise tracking extracts candidate reader promises and payoff changes from accepted prose only.
-12. Memory Curator extracts candidate facts from accepted prose only.
-13. High-risk facts or reader promises enter the decision queue before becoming authoritative.
+12. Specialized systems extract candidate secrets, reveal changes, arc changes, timeline changes, rule changes, and dependency changes from accepted prose only.
+13. Memory Curator extracts candidate facts from accepted prose only.
+14. High-risk facts, reader promises, reveals, arcs, timeline changes, rule changes, or retcons enter the decision queue before becoming authoritative.
 
 ### Review and Revision
 
@@ -709,7 +1041,8 @@ Risk levels:
 5. User applies, rejects, asks why, or converts findings to tasks.
 6. System rechecks affected facts and style.
 7. System rechecks affected reader promises and payoff quality when relevant.
-8. User preference learning records adoption and rejection.
+8. System rechecks affected secrets, arcs, timeline, causality, world rules, and dependencies when relevant.
+9. User preference learning records adoption and rejection.
 
 ### Serialization Loop
 
@@ -737,10 +1070,16 @@ Context pack sections:
 - Relevant canon constraints.
 - Character states.
 - Character voices.
+- Character arcs, motivations, and relationship states.
 - Recent summaries.
 - Current arc state.
 - Reader contract.
 - Reader promises and payoff health when relevant.
+- Secrets, knowledge states, reveal plans, and misinformation when relevant.
+- Timeline, location, causality, deadline, and concurrency constraints.
+- World rules, power rules, limits, costs, exceptions, and constraints.
+- Branch, retcon, and closure context when relevant.
+- Narrative dependency warnings.
 - Open plotlines.
 - Open foreshadowing.
 - Timeline constraints.
@@ -763,11 +1102,12 @@ Retrieval pipeline:
 7. Inject must-have constraints.
 8. Retrieve relevant negative memory.
 9. Retrieve relevant active, risky, or ready-for-payoff reader promises.
-10. Scan conflicts.
-11. Rank by scope, freshness, status, promise strength, health, evidence quality, and task strategy.
-12. Deduplicate and compress.
-13. Allocate context budget.
-14. Store context pack, citations, exclusions, warnings, and retrieval trace.
+10. Retrieve relevant secrets, arcs, timeline constraints, world rules, dependency links, branch context, and closure items.
+11. Scan conflicts.
+12. Rank by scope, freshness, status, promise strength, arc importance, rule strength, dependency risk, health, evidence quality, and task strategy.
+13. Deduplicate and compress.
+14. Allocate context budget.
+15. Store context pack, citations, exclusions, warnings, and retrieval trace.
 
 Retrieval must prefer:
 
@@ -841,9 +1181,16 @@ Review dimensions:
 - Continuity.
 - Plot structure.
 - Foreshadowing and reader-promise health.
+- Secrets, knowledge boundaries, and reveal timing.
 - Character motivation.
+- Character arc and relationship progression.
 - Character voice.
 - Narrator style.
+- Timeline, location, and causality.
+- World rules, powers, and constraints.
+- Change impact and regression risk.
+- Branch adoption risk.
+- Ending and closure health.
 - Pacing.
 - Emotional arc.
 - Web-novel hook and payoff.
@@ -892,8 +1239,13 @@ Quality trend tracking:
 
 - Continuity score.
 - Character consistency.
+- Character arc and relationship health.
+- Timeline and causality health.
+- World-rule consistency.
+- Reveal health.
 - Pacing.
 - Reader-promise health.
+- Closure readiness when the work approaches final arcs.
 - Hook strength.
 - Style match.
 - Reader contract fit.
@@ -918,6 +1270,8 @@ Core features:
 - Reader segments.
 - Promise tracker.
 - Foreshadowing payoff window tracking.
+- Reveal timing and secret-risk tracking.
+- Arc and closure readiness tracking.
 - Arc rhythm monitoring.
 - Churn signal detection.
 - Platform profile.
@@ -962,6 +1316,14 @@ Main modules:
 - manuscript
 - memory
 - promises
+- secrets
+- arcs
+- timeline
+- rules
+- dependencies
+- impact
+- branches
+- closure
 - knowledge
 - agents
 - copilot_runtime
@@ -1121,6 +1483,7 @@ Memory and retrieval phase:
 - Vector retrieval adapter.
 - Context citations.
 - Retrieval trace.
+- Narrative Dependency Index.
 
 Agent workflow phase:
 
@@ -1129,6 +1492,10 @@ Agent workflow phase:
 - Creative Copilot Runtime.
 - Authorship Control and WritingContract.
 - Foreshadowing and Reader Promise System.
+- Secrets, Knowledge Boundary, and Reveal System.
+- Character Arc, Motivation, and Relationship System.
+- Timeline, Location, and Causality System.
+- World Rule, Power, and Constraint System.
 - Run graph.
 - Durable job worker.
 - Schema validation.
@@ -1158,6 +1525,7 @@ Serialization phase:
 - Reader feedback import.
 - Promise tracker.
 - Payoff window tracking.
+- Reveal timing and closure readiness.
 - Arc rhythm.
 
 Advanced governance phase:
@@ -1168,6 +1536,9 @@ Advanced governance phase:
 - Data quality dashboard.
 - Similarity guard.
 - Backup/restore bundle.
+- Change Impact, Retcon, and Regression System.
+- Branch Sandbox and Scenario Simulation System.
+- Ending, Closure, and Final Payoff System.
 
 This is a development sequence, not a scope reduction.
 
@@ -1189,6 +1560,13 @@ The system design is acceptable if it supports:
 - Creating and managing a long-form novel project.
 - Maintaining project memory with canon governance.
 - Tracking foreshadowing and reader promises with confidence, level, strength, health, payoff strategy, and simplified user controls.
+- Tracking secrets, knowledge boundaries, reveals, misinformation, and information leaks.
+- Tracking character arcs, motivations, belief states, relationship arcs, and earned turning points.
+- Checking timeline, location, duration, deadline, concurrency, and causality constraints.
+- Enforcing world rules, power rules, costs, limits, constraints, exceptions, and progression rules.
+- Maintaining a narrative dependency index for retrieval, impact analysis, retcon planning, and regression checks.
+- Simulating branches in an isolated sandbox before adoption.
+- Planning ending closure and final payoff across plot, character, promises, secrets, world state, and reader contract.
 - Running multi-agent workflows with replayable runs.
 - Running Creative Copilot Runtime so strong agent capabilities are available without overwhelming the writing surface.
 - Supporting authorship levels from author-led writing to local co-writing, scene drafting, chapter drafting, and bounded director takeover.
