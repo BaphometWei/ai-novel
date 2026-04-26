@@ -30,15 +30,19 @@ export class SerializationRepository {
   }
 
   async saveReaderFeedback(projectId: string, feedback: ReaderFeedback): Promise<void> {
-    await this.db.insert(readerFeedbackRows).values({
-      id: feedback.id,
-      projectId,
-      chapterId: feedback.chapterId,
-      segment: feedback.segment,
-      sentiment: feedback.sentiment,
-      tagsJson: JSON.stringify(feedback.tags),
-      body: feedback.text
-    });
+    const storageId = toReaderFeedbackStorageId(projectId, feedback.id);
+    await this.db
+      .insert(readerFeedbackRows)
+      .values({
+        id: storageId,
+        projectId,
+        chapterId: feedback.chapterId,
+        segment: feedback.segment,
+        sentiment: feedback.sentiment,
+        tagsJson: JSON.stringify(feedback.tags),
+        body: feedback.text
+      })
+      .onConflictDoNothing({ target: readerFeedbackRows.id });
   }
 
   async listReaderFeedback(projectId: string): Promise<ReaderFeedback[]> {
@@ -49,7 +53,7 @@ export class SerializationRepository {
       .all();
 
     return rows.map((row) => ({
-      id: row.id,
+      id: fromReaderFeedbackStorageId(row.projectId, row.id),
       chapterId: row.chapterId,
       segment: row.segment as ReaderFeedback['segment'],
       sentiment: row.sentiment as ReaderFeedback['sentiment'],
@@ -57,4 +61,13 @@ export class SerializationRepository {
       text: row.body
     }));
   }
+}
+
+function toReaderFeedbackStorageId(projectId: string, feedbackId: string): string {
+  return `${projectId}:${feedbackId}`;
+}
+
+function fromReaderFeedbackStorageId(projectId: string, storageId: string): string {
+  const prefix = `${projectId}:`;
+  return storageId.startsWith(prefix) ? storageId.slice(prefix.length) : storageId;
 }

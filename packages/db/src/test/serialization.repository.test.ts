@@ -51,4 +51,39 @@ describe('SerializationRepository', () => {
     expect(savedFeedback).toEqual([feedback]);
     database.client.close();
   });
+
+  it('treats reader feedback ids as project-scoped import ids', async () => {
+    const database = createDatabase(':memory:');
+    await migrateDatabase(database.client);
+    const projectRepository = new ProjectRepository(database.db);
+    const serializationRepository = new SerializationRepository(database.db);
+    const firstProject = createProject({
+      title: 'First',
+      language: 'zh-CN',
+      targetAudience: 'Chinese web-novel readers'
+    });
+    const secondProject = createProject({
+      title: 'Second',
+      language: 'zh-CN',
+      targetAudience: 'Chinese web-novel readers'
+    });
+    const feedback: ReaderFeedback = {
+      id: 'feedback_1',
+      chapterId: 'chapter_1',
+      segment: 'core_reader',
+      sentiment: 'Negative',
+      tags: ['pacing'],
+      text: 'Bridge chapter slows down.'
+    };
+
+    await projectRepository.save(firstProject);
+    await projectRepository.save(secondProject);
+    await serializationRepository.saveReaderFeedback(firstProject.id, feedback);
+    await serializationRepository.saveReaderFeedback(firstProject.id, feedback);
+    await serializationRepository.saveReaderFeedback(secondProject.id, feedback);
+
+    await expect(serializationRepository.listReaderFeedback(firstProject.id)).resolves.toEqual([feedback]);
+    await expect(serializationRepository.listReaderFeedback(secondProject.id)).resolves.toEqual([feedback]);
+    database.client.close();
+  });
 });

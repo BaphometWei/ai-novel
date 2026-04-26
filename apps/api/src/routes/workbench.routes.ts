@@ -1,13 +1,45 @@
 import {
   buildGenerationSourceContext,
+  buildReviewReport,
   createKnowledgeItem,
   createReviewFinding,
   createRevisionSuggestion,
   createSourcePolicy,
-  summarizeReaderFeedback
+  summarizeReaderFeedback,
+  type GenerationSourceContext,
+  type KnowledgeItem,
+  type Project,
+  type ReaderFeedback,
+  type ReviewReport
 } from '@ai-novel/domain';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
+
+export interface WorkbenchProjectLookup {
+  findById(id: string): Project | null | Promise<Project | null>;
+}
+
+export interface WorkbenchReviewStore {
+  saveReport(report: ReviewReport): Promise<void>;
+  findReportById(id: string): Promise<ReviewReport | null>;
+}
+
+export interface WorkbenchKnowledgeStore {
+  saveKnowledgeItem(projectId: string, item: KnowledgeItem): Promise<void>;
+  buildGenerationSourceContext(projectId: string): Promise<GenerationSourceContext>;
+}
+
+export interface WorkbenchSerializationStore {
+  saveReaderFeedback(projectId: string, feedback: ReaderFeedback): Promise<void>;
+  listReaderFeedback(projectId: string): Promise<ReaderFeedback[]>;
+}
+
+export interface WorkbenchRouteStores {
+  projects: WorkbenchProjectLookup;
+  review: WorkbenchReviewStore;
+  knowledge: WorkbenchKnowledgeStore;
+  serialization: WorkbenchSerializationStore;
+}
 
 const reviewSeveritySchema = z.enum(['Low', 'Medium', 'High', 'Blocking']);
 const riskSchema = z.enum(['Low', 'Medium', 'High']);
@@ -26,6 +58,22 @@ const createReviewFindingSchema = z.object({
   impact: z.string().min(1),
   fixOptions: z.array(z.string().min(1)),
   autoFixRisk: riskSchema
+});
+
+const createReviewReportSchema = z.object({
+  manuscriptVersionId: z.string().min(1),
+  profile: z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    enabledCategories: z.array(z.string().min(1))
+  }),
+  findings: z.array(createReviewFindingSchema),
+  qualityScore: z.object({
+    overall: z.number(),
+    continuity: z.number(),
+    promiseSatisfaction: z.number(),
+    prose: z.number()
+  })
 });
 
 const createRevisionSuggestionSchema = z.object({
@@ -97,11 +145,109 @@ const generationContextSchema = z.object({
   items: z.array(knowledgeItemInputSchema)
 });
 
+const projectParamsSchema = z.object({
+  projectId: z.custom<`project_${string}`>(
+    (value) => typeof value === 'string' && value.startsWith('project_'),
+    'projectId must start with project_'
+  )
+});
+
+const projectReportParamsSchema = projectParamsSchema.extend({
+  id: z.string().min(1)
+});
+
+const feedbackImportSchema = z.object({
+  longTermPlanId: z.string().min(1),
+  feedback: z.array(readerFeedbackSchema)
+});
+
+const feedbackSummaryQuerySchema = z.object({
+  longTermPlanId: z.string().min(1)
+});
+
+class InMemoryReviewStore implements WorkbenchReviewStore {
+  private readonly reports = new Map<string, ReviewReport>();
+
+  async saveReport(report: ReviewReport): Promise<void> {
+    this.reports.set(report.id, report);
+  }
+
+  async findReportById(id: string): Promise<ReviewReport | null> {
+    return this.reports.get(id) ?? null;
+  }
+}
+
+class InMemoryKnowledgeStore implements WorkbenchKnowledgeStore {
+  private readonly itemsByProject = new Map<string, KnowledgeItem[]>();
+
+  async saveKnowledgeItem(projectId: string, item: KnowledgeItem): Promise<void> {
+    this.itemsByProject.set(projectId, [...(this.itemsByProject.get(projectId) ?? []), item]);
+  }
+
+  async buildGenerationSourceContext(projectId: string): Promise<GenerationSourceContext> {
+    return buildGenerationSourceContext(this.itemsByProject.get(projectId) ?? []);
+  }
+}
+
+class InMemorySerializationStore implements WorkbenchSerializationStore {
+  private readonly feedbackByProject = new Map<string, ReaderFeedback[]>();
+
+  async saveReaderFeedback(projectId: string, feedback: ReaderFeedback): Promise<void> {
+    const existing = this.feedbackByProject.get(projectId) ?? [];
+    if (existing.some((saved) => saved.id === feedback.id)) return;
+    this.feedbackByProject.set(projectId, [...existing, feedback]);
+  }
+
+  async listReaderFeedback(projectId: string): Promise<ReaderFeedback[]> {
+    return this.feedbackByProject.get(projectId) ?? [];
+  }
+}
+
+export function createInMemoryWorkbenchStores(projects: WorkbenchProjectLookup): WorkbenchRouteStores {
+  return {
+    projects,
+    review: new InMemoryReviewStore(),
+    knowledge: new InMemoryKnowledgeStore(),
+    serialization: new InMemorySerializationStore()
+  };
+}
+
 function invalidPayload(reply: FastifyReply) {
   return reply.code(400).send({ error: 'Invalid workbench payload' });
 }
 
-export function registerWorkbenchRoutes(app: FastifyInstance) {
+async function findProjectOr404(stores: WorkbenchRouteStores, projectId: string, reply: FastifyReply) {
+  const project = await stores.projects.findById(projectId);
+  if (!project) {
+    reply.code(404).send({ error: 'Project not found' });
+    return null;
+  }
+  return project;
+}
+
+function toKnowledgeItem(input: z.infer<typeof knowledgeItemInputSchema>): KnowledgeItem {
+  const material = {
+    ...input.material,
+    sourcePolicy: createSourcePolicy(input.material.sourcePolicy)
+  };
+
+  return input.id
+    ? {
+        id: input.id,
+        title: input.title,
+        kind: input.kind,
+        lifecycleStatus: input.lifecycleStatus,
+        material,
+        tags: input.tags,
+        embeddings: []
+      }
+    : createKnowledgeItem({
+        ...input,
+        material
+      });
+}
+
+export function registerWorkbenchRoutes(app: FastifyInstance, stores: WorkbenchRouteStores) {
   app.post('/review/findings', async (request, reply) => {
     const parsed = createReviewFindingSchema.safeParse(request.body);
     if (!parsed.success) return invalidPayload(reply);
@@ -116,6 +262,36 @@ export function registerWorkbenchRoutes(app: FastifyInstance) {
     return reply.code(201).send(createRevisionSuggestion(parsed.data));
   });
 
+  app.post('/projects/:projectId/review/reports', async (request, reply) => {
+    const params = projectParamsSchema.safeParse(request.params);
+    const parsed = createReviewReportSchema.safeParse(request.body);
+    if (!params.success || !parsed.success) return invalidPayload(reply);
+    if (!(await findProjectOr404(stores, params.data.projectId, reply))) return reply;
+
+    const findings = parsed.data.findings.map((finding) => createReviewFinding(finding));
+    const report = buildReviewReport({
+      projectId: params.data.projectId,
+      manuscriptVersionId: parsed.data.manuscriptVersionId,
+      profile: parsed.data.profile,
+      findings,
+      qualityScore: parsed.data.qualityScore
+    });
+    await stores.review.saveReport(report);
+    return reply.code(201).send(report);
+  });
+
+  app.get('/projects/:projectId/review/reports/:id', async (request, reply) => {
+    const params = projectReportParamsSchema.safeParse(request.params);
+    if (!params.success) return invalidPayload(reply);
+    if (!(await findProjectOr404(stores, params.data.projectId, reply))) return reply;
+
+    const report = await stores.review.findReportById(params.data.id);
+    if (!report || report.projectId !== params.data.projectId) {
+      return reply.code(404).send({ error: 'Review report not found' });
+    }
+    return reply.send(report);
+  });
+
   app.post('/serialization/feedback-summary', async (request, reply) => {
     const parsed = feedbackSummarySchema.safeParse(request.body);
     if (!parsed.success) return invalidPayload(reply);
@@ -123,33 +299,55 @@ export function registerWorkbenchRoutes(app: FastifyInstance) {
     return reply.send(summarizeReaderFeedback(parsed.data));
   });
 
+  app.post('/projects/:projectId/serialization/reader-feedback', async (request, reply) => {
+    const params = projectParamsSchema.safeParse(request.params);
+    const parsed = feedbackImportSchema.safeParse(request.body);
+    if (!params.success || !parsed.success) return invalidPayload(reply);
+    if (!(await findProjectOr404(stores, params.data.projectId, reply))) return reply;
+
+    const uniqueFeedback = [...new Map(parsed.data.feedback.map((feedback) => [feedback.id, feedback])).values()];
+    for (const feedback of uniqueFeedback) {
+      await stores.serialization.saveReaderFeedback(params.data.projectId, feedback);
+    }
+    const saved = await stores.serialization.listReaderFeedback(params.data.projectId);
+    return reply.send(summarizeReaderFeedback({ longTermPlanId: parsed.data.longTermPlanId, feedback: saved }));
+  });
+
+  app.get('/projects/:projectId/serialization/feedback-summary', async (request, reply) => {
+    const params = projectParamsSchema.safeParse(request.params);
+    const query = feedbackSummaryQuerySchema.safeParse(request.query);
+    if (!params.success || !query.success) return invalidPayload(reply);
+    if (!(await findProjectOr404(stores, params.data.projectId, reply))) return reply;
+
+    const feedback = await stores.serialization.listReaderFeedback(params.data.projectId);
+    return reply.send(summarizeReaderFeedback({ longTermPlanId: query.data.longTermPlanId, feedback }));
+  });
+
   app.post('/knowledge/generation-context', async (request, reply) => {
     const parsed = generationContextSchema.safeParse(request.body);
     if (!parsed.success) return invalidPayload(reply);
 
-    const items = parsed.data.items.map((item) =>
-      item.id
-        ? {
-            id: item.id,
-            title: item.title,
-            kind: item.kind,
-            lifecycleStatus: item.lifecycleStatus,
-            material: {
-              ...item.material,
-              sourcePolicy: createSourcePolicy(item.material.sourcePolicy)
-            },
-            tags: item.tags,
-            embeddings: []
-          }
-        : createKnowledgeItem({
-        ...item,
-        material: {
-          ...item.material,
-          sourcePolicy: createSourcePolicy(item.material.sourcePolicy)
-        }
-      })
-    );
+    const items = parsed.data.items.map(toKnowledgeItem);
 
     return reply.send(buildGenerationSourceContext(items));
+  });
+
+  app.post('/projects/:projectId/knowledge/items', async (request, reply) => {
+    const params = projectParamsSchema.safeParse(request.params);
+    const parsed = knowledgeItemInputSchema.safeParse(request.body);
+    if (!params.success || !parsed.success) return invalidPayload(reply);
+    if (!(await findProjectOr404(stores, params.data.projectId, reply))) return reply;
+
+    const item = toKnowledgeItem(parsed.data);
+    await stores.knowledge.saveKnowledgeItem(params.data.projectId, item);
+    return reply.code(201).send(item);
+  });
+
+  app.get('/projects/:projectId/knowledge/generation-context', async (request, reply) => {
+    const params = projectParamsSchema.safeParse(request.params);
+    if (!params.success) return invalidPayload(reply);
+    if (!(await findProjectOr404(stores, params.data.projectId, reply))) return reply;
+
+    return reply.send(await stores.knowledge.buildGenerationSourceContext(params.data.projectId));
   });
 }
