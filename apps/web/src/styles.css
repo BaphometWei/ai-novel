@@ -322,6 +322,17 @@ nav a:hover {
   gap: 12px;
 }
 
+.blocking-list {
+  background: #fff7ed;
+  border: 1px solid #f2cf9c;
+  border-radius: 8px;
+  color: #5a3b12;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 12px 12px 28px;
+}
+
 .decision-panel {
   align-self: start;
   display: grid;

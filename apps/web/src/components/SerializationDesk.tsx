@@ -1,5 +1,11 @@
 import { useMemo, useState } from 'react';
-import { createSerializationPlan, summarizeReaderFeedback, type ReaderFeedback } from '@ai-novel/domain';
+import {
+  buildPublishChecklist,
+  createSerializationPlan,
+  summarizeReaderFeedback,
+  type PublishIssue,
+  type ReaderFeedback
+} from '@ai-novel/domain';
 
 const baseFeedback: ReaderFeedback[] = [
   {
@@ -28,6 +34,13 @@ const baseFeedback: ReaderFeedback[] = [
   }
 ];
 
+const publishIssues: PublishIssue[] = [
+  { category: 'reader_promise', severity: 'High', message: 'Core promise is near payoff and unresolved.' },
+  { category: 'reveal', severity: 'High', message: 'Secret reveal timing would spoil the bell mystery.' },
+  { category: 'source_policy', severity: 'Blocking', message: 'Restricted sample appears in draft.' },
+  { category: 'update_calendar', severity: 'High', message: 'Buffer is below the daily cadence target.' }
+];
+
 export function SerializationDesk() {
   const [bufferChapters, setBufferChapters] = useState(3);
   const [feedback, setFeedback] = useState(baseFeedback);
@@ -50,6 +63,10 @@ export function SerializationDesk() {
       }),
     [bufferChapters]
   );
+  const publishChecklist = useMemo(
+    () => buildPublishChecklist({ chapterId: 'chapter_12', issues: publishIssues }),
+    []
+  );
   const feedbackSummary = useMemo(
     () => summarizeReaderFeedback({ longTermPlanId: plan.id, feedback }),
     [feedback, plan.id]
@@ -66,7 +83,11 @@ export function SerializationDesk() {
       <dl className="compact-list">
         <div>
           <dt>Publish readiness</dt>
-          <dd>No blocking issues</dd>
+          <dd>
+            {publishChecklist.ready
+              ? 'No blocking issues'
+              : `Blocked by ${publishChecklist.blockingIssues.length} issues`}
+          </dd>
         </div>
         <div>
           <dt>Update buffer</dt>
@@ -89,6 +110,13 @@ export function SerializationDesk() {
           <dd>Buffer gap: {plan.updateSchedule.bufferGap}</dd>
         </div>
       </dl>
+      <ul className="blocking-list" aria-label="Publish blockers">
+        {publishChecklist.blockingIssues.map((issue) => (
+          <li key={`${issue.category}-${issue.message}`}>
+            {formatIssueCategory(issue.category)}: {issue.message}
+          </li>
+        ))}
+      </ul>
       <div className="button-row">
         <button
           type="button"
@@ -114,4 +142,15 @@ export function SerializationDesk() {
       </div>
     </section>
   );
+}
+
+function formatIssueCategory(category: PublishIssue['category']): string {
+  const labels: Record<PublishIssue['category'], string> = {
+    reader_promise: 'Reader promise',
+    reveal: 'Reveal',
+    source_policy: 'Source policy',
+    update_calendar: 'Update calendar',
+    other: 'Other'
+  };
+  return labels[category];
 }

@@ -7,12 +7,19 @@ describe('Publish checklist', () => {
       chapterId: 'chapter_10',
       issues: [
         { category: 'reader_promise', severity: 'High', message: 'Core promise is near payoff and unresolved.' },
-        { category: 'source_policy', severity: 'Blocking', message: 'Restricted sample appears in draft.' }
+        { category: 'reveal', severity: 'High', message: 'Secret reveal timing would spoil the mystery.' },
+        { category: 'source_policy', severity: 'Blocking', message: 'Restricted sample appears in draft.' },
+        { category: 'update_calendar', severity: 'High', message: 'Buffer is below cadence target.' }
       ]
     });
 
     expect(checklist.ready).toBe(false);
-    expect(checklist.blockingIssues).toHaveLength(2);
+    expect(checklist.blockingIssues.map((issue) => issue.category)).toEqual([
+      'reader_promise',
+      'reveal',
+      'source_policy',
+      'update_calendar'
+    ]);
   });
 
   it('creates serialization plans with update schedule and platform profile', () => {
