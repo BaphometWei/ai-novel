@@ -8,7 +8,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
     "db:check": "tsx src/check.ts",
-    "test": "vitest run src"
+    "test": "vitest run --root ../.. packages/db/src"
   },
   "dependencies": {
     "@ai-novel/domain": "file:../domain",
