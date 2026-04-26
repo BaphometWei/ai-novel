@@ -11,6 +11,7 @@
   "dependencies": {
     "@ai-novel/db": "file:../../packages/db",
     "@ai-novel/domain": "file:../../packages/domain",
+    "@ai-novel/llm-gateway": "file:../../packages/llm-gateway",
     "@ai-novel/workflow": "file:../../packages/workflow",
     "fastify": "^4.26.2",
     "zod": "^3.23.8"
