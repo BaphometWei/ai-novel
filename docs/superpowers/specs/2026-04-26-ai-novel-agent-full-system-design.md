@@ -4,7 +4,7 @@ Date: 2026-04-26
 
 ## Purpose
 
-Build a full-featured AI novel creation system for Chinese long-form and web-novel authors. The product is a local Web writing workspace with an API-shaped modular monolith architecture. It supports multi-agent story development, long-form memory, structured sample and technique libraries, agent-assisted authoring, editorial review, automatic revision support, and serialization operations.
+Build a full-featured AI novel creation system for Chinese long-form and web-novel authors. The product is a local Web writing workspace with an API-shaped modular monolith architecture. It supports multi-agent story development, long-form memory, foreshadowing and reader-promise tracking, structured sample and technique libraries, agent-assisted authoring, editorial review, automatic revision support, and serialization operations.
 
 The system is not a generic chatbot and not a fully autonomous content mill. It is a professional writing workspace where the author remains the final creative authority. Agents can propose, draft, review, revise, summarize, and extract memory, but high-risk canon, plot, publishing, and source-policy decisions require user approval.
 
@@ -37,6 +37,7 @@ Architecture shape:
 
 - Long-form continuity is the main product value.
 - Canon must be governed, not inferred casually.
+- Foreshadowing is a tracked reader promise, not just a note. The system must help authors preserve, reinforce, pay off, transform, delay, or abandon promises deliberately.
 - Every agent run must be traceable through input, context, prompt version, output, cost, and user adoption.
 - Samples are structured craft knowledge, not a raw imitation warehouse.
 - Review should preserve author voice and apply the smallest effective fix.
@@ -52,6 +53,7 @@ Architecture shape:
 - Project memory.
 - Manuscript editor.
 - Story bible.
+- Foreshadowing and reader-promise board.
 - Multi-agent writing workflows.
 - Agent-assisted authoring from local rewrites to full chapter drafts.
 - Sample, trope, technique, style, and genre libraries.
@@ -67,6 +69,7 @@ Architecture shape:
 - Task contracts.
 - Context builder.
 - Retrieval engine.
+- Foreshadowing health and payoff-window detection.
 - LLM gateway.
 - Quality evaluation.
 - Review board.
@@ -78,6 +81,7 @@ Architecture shape:
 
 - Canon ledger.
 - Memory status transitions.
+- Reader-promise lifecycle and risk governance.
 - Source and rights policy.
 - Prompt and run versioning.
 - Artifact store.
@@ -96,7 +100,7 @@ Primary screens:
 
 - Project Dashboard: progress, current chapter, risks, decisions, open conflicts, upcoming serialization tasks.
 - Manuscript Editor: chapter tree, scene beats, rich text editor, inline review findings, agent actions, version comparison.
-- Story Bible: characters, factions, world rules, locations, timeline, plotlines, foreshadowing, canon ledger.
+- Story Bible: characters, factions, world rules, locations, timeline, plotlines, foreshadowing, reader promises, canon ledger.
 - Agent Room: run workflows, inspect context packs, compare agent outputs, review run graphs, approve memory changes.
 - Knowledge Library: samples, tropes, techniques, genre rules, style profiles, review rules, source policies.
 - Review Center: findings, quality scores, revision plans, false-positive handling, recurring issue trends.
@@ -110,6 +114,7 @@ Important UX features:
 - Decision queue for approvals and high-risk changes.
 - Context inspector showing exactly what memory and samples each agent used.
 - Story maps for timeline, relationship graph, faction graph, foreshadowing board, emotional arc, and chapter hook distribution.
+- Foreshadowing board with simple user-facing states: pending confirmation, active, ready for payoff, resolved, problem, and parked.
 - Inline editorial comments with one-click apply, reject, ask why, or convert to task.
 - Diff-based revision review.
 - Command palette for common actions.
@@ -154,6 +159,11 @@ Important UX features:
 - Plotline
 - PlotBeat
 - Foreshadowing
+- ForeshadowingCandidate
+- ReaderPromise
+- PromiseHealthAssessment
+- PayoffPlan
+- PayoffReview
 - TimelineEvent
 - NarrativeState
 - ReaderContract
@@ -289,7 +299,6 @@ SourcePolicy records:
 - ReaderFeedback
 - ReaderFeedbackSummary
 - ReaderSegment
-- ReaderPromise
 - PlatformProfile
 - SerializationExperiment
 
@@ -359,6 +368,147 @@ After a chapter is finalized, a memory extraction workflow identifies:
 
 Risky updates enter the decision queue.
 
+## Foreshadowing and Reader Promise System
+
+The Foreshadowing and Reader Promise System tracks unresolved narrative questions, setup details, mysteries, future payoffs, and reader expectations as first-class story assets. Its purpose is not to create a noisy list of every possible clue. Its purpose is to ensure that meaningful promises can be remembered across very long manuscripts and handled deliberately.
+
+This system should be understood as reader-promise tracking:
+
+- What question or expectation did the story create?
+- Why would a reader remember or care about it?
+- How important is it?
+- Has it been reinforced?
+- Is the current story location a good payoff window?
+- Should the promise be reinforced, paid off, transformed, delayed, or abandoned?
+- Did the payoff actually satisfy the original promise?
+
+Foreshadowing levels:
+
+- Micro promise: local detail or scene-level setup.
+- Chapter promise: setup expected to matter within a few chapters.
+- Volume promise: setup expected to matter within the current volume.
+- Main-plot promise: cross-volume setup tied to core plot, identity, antagonist, world rule, or major relationship.
+- Endgame promise: long-range setup intended for late-stage or finale payoff.
+
+Reader-promise strength:
+
+- Low: atmospheric or optional detail.
+- Medium: affects a side thread, character impression, or local mystery.
+- High: creates a clear reader expectation.
+- Core: tied to main plot, protagonist identity, antagonist plan, world truth, or finale expectation.
+
+Candidate handling:
+
+- Low-confidence detections enter a silent pool and do not interrupt the author.
+- Medium-confidence detections are folded into chapter-end summaries.
+- High-confidence detections enter a candidate confirmation list.
+- Core suspected promises enter the decision queue.
+
+Internal lifecycle states may be detailed, but the UI should expose only simple states:
+
+- Pending confirmation.
+- Active.
+- Ready for payoff.
+- Resolved.
+- Problem.
+- Parked.
+
+Internal states can include:
+
+- Candidate.
+- Seeded.
+- Reinforced.
+- Active.
+- Near payoff.
+- Paid off.
+- Transformed.
+- Delayed.
+- Dropped.
+- Conflict.
+
+Promise health assessment:
+
+- Normal: waiting period and story relevance are appropriate.
+- Needs reinforcement: the promise should be reminded or echoed, not paid off yet.
+- Ready for payoff: current entities, arc state, and reader expectation make payoff timely.
+- Expiration risk: the promise has been absent long enough to risk reader frustration or forgetfulness.
+- Conflict risk: later story material contradicts or weakens the promise.
+- Insufficient payoff: the story touched the promise but did not satisfy the original question.
+
+Payoff strategies:
+
+- Reinforce: remind readers without answering yet.
+- Small payoff: answer the surface question while preserving deeper tension.
+- True payoff: answer the core question.
+- False payoff: provide an apparent answer intended for later reversal.
+- Transform: answer one promise while turning it into a larger promise.
+- Delay: intentionally postpone with a clear plan or renewed setup.
+- Abandon: explicitly mark the promise as dropped, with a reason, so agents stop trying to use it.
+
+Foreshadowing records should include:
+
+- Title.
+- Level.
+- Promise strength.
+- Surface clue.
+- Hidden question.
+- Reader expectation.
+- First appearance location.
+- Supporting citation or summary.
+- Related characters, objects, locations, factions, world rules, plotlines, and chapters.
+- Current status.
+- Current health.
+- Last reinforcement location.
+- Payoff window.
+- Candidate payoff options.
+- Actual payoff location.
+- Payoff review result.
+
+Automation rules:
+
+- The system may automatically detect candidate promises during import, chapter finalization, review, and agent-assisted authoring.
+- The system should not ask the author to fill complex forms during active writing.
+- Agents may fill metadata, but the author confirms high-importance or high-risk promises.
+- Similar candidate promises should be mergeable.
+- Ordinary atmosphere and flavor should not become active promises unless repeatedly emphasized or user-confirmed.
+
+User actions should stay simple:
+
+- Confirm as promise.
+- Not a promise.
+- Merge with existing promise.
+- Raise or lower importance.
+- Mark as long-range.
+- Pay off now.
+- Remind later.
+- Park.
+- Abandon.
+
+Runtime behavior:
+
+- During free writing, only highly relevant or high-risk promises should interrupt.
+- At chapter end, new, reinforced, resolved, or risky promises are summarized.
+- During review, the system checks missed payoff opportunities, premature reveals, unresolved promises, and insufficient payoffs.
+- During publish preparation, only high-risk reader-promise issues become blocking.
+- During blocked writing or director mode, unresolved promises can be used as plot fuel.
+- During serialization review, promises mentioned by reader feedback receive higher attention but cannot override the long-term plan without user approval.
+
+Long-form retrieval support:
+
+- Reader promises are indexed by entity links, chapter range, plotline, level, strength, status, and health.
+- Context Builder must retrieve relevant active or risky promises when current writing involves related entities, objects, secrets, factions, or plotlines.
+- Long-running promises are summarized at multiple levels so a million-word manuscript does not rely on raw text recall.
+- Payoff checks should cite the original setup and any reinforcements.
+
+Payoff quality review checks:
+
+- Did the payoff answer the hidden question?
+- Did the payoff respect canon and prior clues?
+- Did the payoff feel earned rather than arbitrary?
+- Did it create an appropriate emotional, suspense, or satisfaction effect?
+- Did it introduce a new promise that should be tracked?
+- Was the payoff too small, too large, too early, or too late for its level and strength?
+
 ## Creative Copilot Runtime
 
 Creative Copilot Runtime is the system-level coordinator that decides when agent capabilities run, how deeply they run, how much of their output is shown, and when the user must be interrupted.
@@ -403,6 +553,7 @@ High-risk or blocking events must be visible in every mode:
 - External publication readiness failure.
 - Cost or context budget breach.
 - Agent writing contract failure.
+- Core reader-promise conflict or accidental payoff failure near publication.
 
 ## Authorship Control
 
@@ -528,9 +679,10 @@ Risk levels:
 7. Review board checks continuity, structure, voice, style, and serialization fit.
 8. Writer Agent produces revisions.
 9. User reviews diffs and approves final text or selected fragments.
-10. Memory Curator extracts candidate updates from accepted text.
-11. User approves high-risk memory changes.
-12. Serialization Agent prepares title, hook, preview, and next-chapter strategy.
+10. Promise tracking identifies new, reinforced, resolved, or risky reader promises.
+11. Memory Curator extracts candidate updates from accepted text.
+12. User approves high-risk memory and reader-promise changes.
+13. Serialization Agent prepares title, hook, preview, and next-chapter strategy.
 
 ### Agent-Assisted Authoring
 
@@ -544,8 +696,9 @@ Risk levels:
 8. System either revises automatically within safe limits or presents findings and diffs.
 9. User accepts, rejects, partially accepts, or asks for another candidate.
 10. Accepted prose becomes a new manuscript version.
-11. Memory Curator extracts candidate facts from accepted prose only.
-12. High-risk facts enter the decision queue before becoming canon.
+11. Promise tracking extracts candidate reader promises and payoff changes from accepted prose only.
+12. Memory Curator extracts candidate facts from accepted prose only.
+13. High-risk facts or reader promises enter the decision queue before becoming authoritative.
 
 ### Review and Revision
 
@@ -555,7 +708,8 @@ Risk levels:
 4. Revision suggestions are generated with the smallest effective patch.
 5. User applies, rejects, asks why, or converts findings to tasks.
 6. System rechecks affected facts and style.
-7. User preference learning records adoption and rejection.
+7. System rechecks affected reader promises and payoff quality when relevant.
+8. User preference learning records adoption and rejection.
 
 ### Serialization Loop
 
@@ -565,7 +719,7 @@ Risk levels:
 4. User publishes externally or marks as published.
 5. Reader feedback is imported manually through paste or file import in the initial local product; platform connectors are treated as extension modules behind the same import interface.
 6. Feedback is summarized with confidence and reader segment.
-7. Long-term promises, churn signals, and arc rhythm are updated.
+7. Long-term promises, reader-promise mentions, churn signals, and arc rhythm are updated.
 8. Next chapter strategy is added to planning context.
 
 ## Retrieval and Context Builder
@@ -586,6 +740,7 @@ Context pack sections:
 - Recent summaries.
 - Current arc state.
 - Reader contract.
+- Reader promises and payoff health when relevant.
 - Open plotlines.
 - Open foreshadowing.
 - Timeline constraints.
@@ -607,11 +762,12 @@ Retrieval pipeline:
 6. Run vector search.
 7. Inject must-have constraints.
 8. Retrieve relevant negative memory.
-9. Scan conflicts.
-10. Rank by scope, freshness, status, evidence quality, and task strategy.
-11. Deduplicate and compress.
-12. Allocate context budget.
-13. Store context pack, citations, exclusions, warnings, and retrieval trace.
+9. Retrieve relevant active, risky, or ready-for-payoff reader promises.
+10. Scan conflicts.
+11. Rank by scope, freshness, status, promise strength, health, evidence quality, and task strategy.
+12. Deduplicate and compress.
+13. Allocate context budget.
+14. Store context pack, citations, exclusions, warnings, and retrieval trace.
 
 Retrieval must prefer:
 
@@ -684,6 +840,7 @@ Review dimensions:
 
 - Continuity.
 - Plot structure.
+- Foreshadowing and reader-promise health.
 - Character motivation.
 - Character voice.
 - Narrator style.
@@ -736,6 +893,7 @@ Quality trend tracking:
 - Continuity score.
 - Character consistency.
 - Pacing.
+- Reader-promise health.
 - Hook strength.
 - Style match.
 - Reader contract fit.
@@ -759,6 +917,7 @@ Core features:
 - Feedback confidence scoring.
 - Reader segments.
 - Promise tracker.
+- Foreshadowing payoff window tracking.
 - Arc rhythm monitoring.
 - Churn signal detection.
 - Platform profile.
@@ -802,6 +961,7 @@ Main modules:
 - project
 - manuscript
 - memory
+- promises
 - knowledge
 - agents
 - copilot_runtime
@@ -968,6 +1128,7 @@ Agent workflow phase:
 - Task contracts.
 - Creative Copilot Runtime.
 - Authorship Control and WritingContract.
+- Foreshadowing and Reader Promise System.
 - Run graph.
 - Durable job worker.
 - Schema validation.
@@ -996,6 +1157,7 @@ Serialization phase:
 - Title and hook generation.
 - Reader feedback import.
 - Promise tracker.
+- Payoff window tracking.
 - Arc rhythm.
 
 Advanced governance phase:
@@ -1026,6 +1188,7 @@ The system design is acceptable if it supports:
 
 - Creating and managing a long-form novel project.
 - Maintaining project memory with canon governance.
+- Tracking foreshadowing and reader promises with confidence, level, strength, health, payoff strategy, and simplified user controls.
 - Running multi-agent workflows with replayable runs.
 - Running Creative Copilot Runtime so strong agent capabilities are available without overwhelming the writing surface.
 - Supporting authorship levels from author-led writing to local co-writing, scene drafting, chapter drafting, and bounded director takeover.
@@ -1036,6 +1199,8 @@ The system design is acceptable if it supports:
 - Reviewing chapters with evidence-backed findings.
 - Applying controlled revisions with diff and recheck.
 - Extracting memory from finalized chapters.
+- Recalling early reader promises in later chapters through entity links, summaries, retrieval policy, and context packs.
+- Reviewing payoff quality and detecting missed, premature, insufficient, or conflicting payoffs.
 - Supporting serialization planning and reader feedback.
 - Importing, exporting, backing up, and restoring projects.
 - Evaluating prompt/model/retrieval changes with project-specific cases.
