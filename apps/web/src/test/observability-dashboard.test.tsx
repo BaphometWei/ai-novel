@@ -26,5 +26,11 @@ describe('ObservabilityDashboard', () => {
     expect(screen.getByText('accepted 1')).toBeInTheDocument();
     expect(screen.getByText('User adoption')).toBeInTheDocument();
     expect(screen.getByText('adopted 1')).toBeInTheDocument();
+    expect(screen.getByText('Run errors')).toBeInTheDocument();
+    expect(screen.getByText('schema_validation 1')).toBeInTheDocument();
+    expect(screen.getByText('Workflow bottlenecks')).toBeInTheDocument();
+    expect(screen.getByText('generate-draft 3,000 ms avg')).toBeInTheDocument();
+    expect(screen.getByText('Data quality')).toBeInTheDocument();
+    expect(screen.getByText('2 open, 1 high')).toBeInTheDocument();
   });
 });

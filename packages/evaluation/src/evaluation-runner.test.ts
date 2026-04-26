@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createEvaluationCase, runEvaluationCases } from './evaluation-runner';
-import { summarizeObservability } from './observability';
+import { summarizeDataQualityIssues, summarizeObservability, summarizeWorkflowBottlenecks } from './observability';
 
 describe('evaluation runner', () => {
   it('reports missing must-have facts when a retrieval policy changes', async () => {
@@ -60,7 +60,17 @@ describe('evaluation runner', () => {
         contextLength: 5000,
         status: 'Failed',
         qualityOutcome: 'needs_revision',
-        userAdoption: 'rejected'
+        userAdoption: 'rejected',
+        errors: [
+          {
+            id: 'error_schema_1',
+            code: 'schema_validation',
+            message: 'Structured output failed validation',
+            severity: 'Error',
+            retryable: true,
+            occurredAt: '2026-04-27T00:00:00.000Z'
+          }
+        ]
       }
     ]);
 
@@ -76,7 +86,75 @@ describe('evaluation runner', () => {
         { modelProvider: 'openai', modelName: 'gpt-5-mini', runCount: 1, totalTokens: 1000, totalCostUsd: 0.5 }
       ],
       qualityOutcomes: { accepted: 1, needs_revision: 1 },
-      userAdoption: { adopted: 1, rejected: 1 }
+      userAdoption: { adopted: 1, rejected: 1 },
+      runErrors: [{ code: 'schema_validation', count: 1, retryableCount: 1, maxSeverity: 'Error' }]
+    });
+  });
+
+  it('summarizes workflow bottlenecks from step telemetry', () => {
+    const report = summarizeWorkflowBottlenecks([
+      { workflowType: 'draft', stepName: 'retrieve-context', durationMs: 1200, status: 'Succeeded', retryCount: 0 },
+      { workflowType: 'draft', stepName: 'generate-draft', durationMs: 2600, status: 'Failed', retryCount: 2 },
+      { workflowType: 'draft', stepName: 'generate-draft', durationMs: 3400, status: 'Succeeded', retryCount: 1 }
+    ]);
+
+    expect(report).toEqual([
+      {
+        workflowType: 'draft',
+        stepName: 'generate-draft',
+        runCount: 2,
+        averageDurationMs: 3000,
+        failureRate: 0.5,
+        retryPressure: 3
+      },
+      {
+        workflowType: 'draft',
+        stepName: 'retrieve-context',
+        runCount: 1,
+        averageDurationMs: 1200,
+        failureRate: 0,
+        retryPressure: 0
+      }
+    ]);
+  });
+
+  it('summarizes open data-quality issues by source and severity', () => {
+    const summary = summarizeDataQualityIssues([
+      {
+        id: 'issue_canon_1',
+        projectId: 'project_demo',
+        source: 'canon',
+        severity: 'High',
+        status: 'Open',
+        message: 'Canon fact has no confirmation trail'
+      },
+      {
+        id: 'issue_knowledge_1',
+        projectId: 'project_demo',
+        source: 'knowledge',
+        severity: 'Medium',
+        status: 'Open',
+        message: 'Knowledge item missing source policy'
+      },
+      {
+        id: 'issue_run_1',
+        projectId: 'project_demo',
+        source: 'agent_run',
+        severity: 'Low',
+        status: 'Resolved',
+        message: 'Transient run warning'
+      }
+    ]);
+
+    expect(summary).toEqual({
+      openIssueCount: 2,
+      highSeverityOpenCount: 1,
+      bySource: { canon: 1, knowledge: 1 },
+      bySeverity: { High: 1, Medium: 1 },
+      unresolved: [
+        expect.objectContaining({ id: 'issue_canon_1', source: 'canon' }),
+        expect.objectContaining({ id: 'issue_knowledge_1', source: 'knowledge' })
+      ]
     });
   });
 });

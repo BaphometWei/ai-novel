@@ -1,4 +1,8 @@
-import { summarizeObservability } from '@ai-novel/evaluation';
+import {
+  summarizeDataQualityIssues,
+  summarizeObservability,
+  summarizeWorkflowBottlenecks
+} from '@ai-novel/evaluation';
 
 const summary = summarizeObservability([
   {
@@ -25,11 +29,47 @@ const summary = summarizeObservability([
     contextLength: 5000,
     status: 'Failed',
     qualityOutcome: 'needs_revision',
-    userAdoption: 'rejected'
+    userAdoption: 'rejected',
+    errors: [
+      {
+        id: 'error_schema_1',
+        code: 'schema_validation',
+        message: 'Structured output failed validation',
+        severity: 'Error',
+        retryable: true,
+        occurredAt: '2026-04-27T00:00:00.000Z'
+      }
+    ]
+  }
+]);
+const bottlenecks = summarizeWorkflowBottlenecks([
+  { workflowType: 'draft', stepName: 'retrieve-context', durationMs: 1200, status: 'Succeeded', retryCount: 0 },
+  { workflowType: 'draft', stepName: 'generate-draft', durationMs: 2600, status: 'Failed', retryCount: 2 },
+  { workflowType: 'draft', stepName: 'generate-draft', durationMs: 3400, status: 'Succeeded', retryCount: 1 }
+]);
+const dataQuality = summarizeDataQualityIssues([
+  {
+    id: 'issue_canon_1',
+    projectId: 'project_demo',
+    source: 'canon',
+    severity: 'High',
+    status: 'Open',
+    message: 'Canon fact has no confirmation trail'
+  },
+  {
+    id: 'issue_knowledge_1',
+    projectId: 'project_demo',
+    source: 'knowledge',
+    severity: 'Medium',
+    status: 'Open',
+    message: 'Knowledge item missing source policy'
   }
 ]);
 
 export function ObservabilityDashboard() {
+  const primaryBottleneck = bottlenecks[0];
+  const primaryError = summary.runErrors[0];
+
   return (
     <section className="surface-panel" aria-labelledby="observability-title">
       <header className="panel-header">
@@ -68,6 +108,24 @@ export function ObservabilityDashboard() {
         <div>
           <dt>User adoption</dt>
           <dd>adopted {summary.userAdoption.adopted}</dd>
+        </div>
+        <div>
+          <dt>Run errors</dt>
+          <dd>{primaryError ? `${primaryError.code} ${primaryError.count}` : 'none'}</dd>
+        </div>
+        <div>
+          <dt>Workflow bottlenecks</dt>
+          <dd>
+            {primaryBottleneck
+              ? `${primaryBottleneck.stepName} ${primaryBottleneck.averageDurationMs.toLocaleString('en-US')} ms avg`
+              : 'none'}
+          </dd>
+        </div>
+        <div>
+          <dt>Data quality</dt>
+          <dd>
+            {dataQuality.openIssueCount} open, {dataQuality.highSeverityOpenCount} high
+          </dd>
         </div>
       </dl>
     </section>
