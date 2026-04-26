@@ -1,4 +1,5 @@
 export * from './authorship';
+export * from './agents';
 export * from './copilot-runtime';
 export * from './durable-job';
 export * from './export-workflow';

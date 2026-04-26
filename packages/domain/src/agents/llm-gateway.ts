@@ -4,6 +4,7 @@ export interface TokenUsage {
 }
 
 export interface ProviderAdapter {
+  name?: string;
   generateText(input: { prompt: string; model?: string }): Promise<{ text: string; usage: TokenUsage }>;
   generateStructured<T>(input: {
     prompt: string;
