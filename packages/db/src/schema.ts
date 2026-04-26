@@ -44,6 +44,21 @@ export const agentRuns = sqliteTable('agent_runs', {
   createdAt: text('created_at').notNull()
 });
 
+export const workflowRuns = sqliteTable('workflow_runs', {
+  id: text('id').primaryKey(),
+  taskContractId: text('task_contract_id').notNull(),
+  stepsJson: text('steps_json').notNull()
+});
+
+export const durableJobs = sqliteTable('durable_jobs', {
+  id: text('id').primaryKey(),
+  workflowType: text('workflow_type').notNull(),
+  payloadJson: text('payload_json').notNull(),
+  status: text('status').notNull(),
+  retryCount: integer('retry_count').notNull(),
+  replayOfJobId: text('replay_of_job_id')
+});
+
 export const canonFacts = sqliteTable('canon_facts', {
   id: text('id').primaryKey(),
   projectId: text('project_id').notNull().references(() => projects.id),

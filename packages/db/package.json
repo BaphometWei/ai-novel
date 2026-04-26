@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@ai-novel/domain": "file:../domain",
+    "@ai-novel/workflow": "file:../workflow",
     "@libsql/client": "^0.14.0",
     "drizzle-orm": "^0.31.0"
   },

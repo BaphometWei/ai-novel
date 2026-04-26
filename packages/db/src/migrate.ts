@@ -44,6 +44,19 @@ const statements = [
     created_at TEXT NOT NULL,
     FOREIGN KEY (context_pack_id) REFERENCES context_packs(id)
   )`,
+  `CREATE TABLE IF NOT EXISTS workflow_runs (
+    id TEXT PRIMARY KEY,
+    task_contract_id TEXT NOT NULL,
+    steps_json TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS durable_jobs (
+    id TEXT PRIMARY KEY,
+    workflow_type TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    status TEXT NOT NULL,
+    retry_count INTEGER NOT NULL,
+    replay_of_job_id TEXT
+  )`,
   `CREATE TABLE IF NOT EXISTS canon_facts (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,
