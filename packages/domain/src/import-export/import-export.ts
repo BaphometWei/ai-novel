@@ -72,7 +72,7 @@ export interface ProjectBundleInput {
 
 export type ProjectBundle = Required<Omit<ProjectBundleInput, 'createdAt'>> & {
   format: 'ai-novel-project-bundle';
-  version: 1;
+  version: number;
   createdAt: string;
   hash: string;
 };

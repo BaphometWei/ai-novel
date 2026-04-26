@@ -162,3 +162,29 @@ export const knowledgeItems = sqliteTable('knowledge_items', {
   tagsJson: text('tags_json').notNull(),
   embeddingsJson: text('embeddings_json').notNull()
 });
+
+export const projectBundleBackups = sqliteTable('project_bundle_backups', {
+  hash: text('hash').primaryKey(),
+  path: text('path').notNull(),
+  bundleJson: text('bundle_json').notNull(),
+  createdAt: text('created_at').notNull()
+});
+
+export const projectBundleRestores = sqliteTable('project_bundle_restores', {
+  id: text('id').primaryKey(),
+  bundleHash: text('bundle_hash').notNull().references(() => projectBundleBackups.hash),
+  sourceProjectIdJson: text('source_project_id_json').notNull(),
+  targetProjectId: text('target_project_id').notNull(),
+  restoredAt: text('restored_at').notNull(),
+  migrationsAppliedJson: text('migrations_applied_json').notNull(),
+  rollbackActionsJson: text('rollback_actions_json').notNull()
+});
+
+export const projectBundleRestoreItems = sqliteTable('project_bundle_restore_items', {
+  id: text('id').primaryKey(),
+  restoreId: text('restore_id').notNull().references(() => projectBundleRestores.id),
+  bundleHash: text('bundle_hash').notNull().references(() => projectBundleBackups.hash),
+  targetProjectId: text('target_project_id').notNull(),
+  section: text('section').notNull(),
+  payloadJson: text('payload_json').notNull()
+});

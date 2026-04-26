@@ -8,6 +8,7 @@ export * from './repositories/durable-job.repository';
 export * from './repositories/knowledge.repository';
 export * from './repositories/llm-call-log.repository';
 export * from './repositories/memory.repository';
+export * from './repositories/project-bundle.repository';
 export * from './repositories/project.repository';
 export * from './repositories/review.repository';
 export * from './repositories/search.repository';

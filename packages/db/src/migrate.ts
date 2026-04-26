@@ -166,6 +166,32 @@ const statements = [
     tags_json TEXT NOT NULL,
     embeddings_json TEXT NOT NULL,
     FOREIGN KEY (project_id) REFERENCES projects(id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS project_bundle_backups (
+    hash TEXT PRIMARY KEY,
+    path TEXT NOT NULL,
+    bundle_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS project_bundle_restores (
+    id TEXT PRIMARY KEY,
+    bundle_hash TEXT NOT NULL,
+    source_project_id_json TEXT NOT NULL,
+    target_project_id TEXT NOT NULL,
+    restored_at TEXT NOT NULL,
+    migrations_applied_json TEXT NOT NULL,
+    rollback_actions_json TEXT NOT NULL,
+    FOREIGN KEY (bundle_hash) REFERENCES project_bundle_backups(hash)
+  )`,
+  `CREATE TABLE IF NOT EXISTS project_bundle_restore_items (
+    id TEXT PRIMARY KEY,
+    restore_id TEXT NOT NULL,
+    bundle_hash TEXT NOT NULL,
+    target_project_id TEXT NOT NULL,
+    section TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    FOREIGN KEY (restore_id) REFERENCES project_bundle_restores(id),
+    FOREIGN KEY (bundle_hash) REFERENCES project_bundle_backups(hash)
   )`
 ];
 
