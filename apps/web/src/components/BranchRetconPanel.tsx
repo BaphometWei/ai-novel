@@ -15,10 +15,13 @@ import {
 
 export interface BranchRetconPanelProps {
   client?: BranchRetconApiClient;
+  projectId?: string;
 }
 
-export function BranchRetconPanel({ client }: BranchRetconPanelProps) {
+export function BranchRetconPanel({ client, projectId }: BranchRetconPanelProps) {
   const resolvedClient = useMemo(() => client ?? createApiClient(), [client]);
+  const activeProjectId = projectId ?? '';
+  const hasProject = activeProjectId.trim().length > 0;
   const [branchResult, setBranchResult] = useState<BranchProjectResult | null>(null);
   const [adoptResult, setAdoptResult] = useState<BranchAdoptResult | null>(null);
   const [retconResult, setRetconResult] = useState<RetconProposalResult | null>(null);
@@ -26,16 +29,33 @@ export function BranchRetconPanel({ client }: BranchRetconPanelProps) {
   const [persistedScenarios, setPersistedScenarios] = useState<PersistedBranchScenario[]>([]);
   const [persistedProposals, setPersistedProposals] = useState<PersistedRetconProposal[]>([]);
   const [persistedRuns, setPersistedRuns] = useState<PersistedRegressionCheckRun[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(hasProject);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    if (!hasProject) {
+      setBranchResult(null);
+      setAdoptResult(null);
+      setRetconResult(null);
+      setRegressionResult(null);
+      setPersistedScenarios([]);
+      setPersistedProposals([]);
+      setPersistedRuns([]);
+      setError(null);
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
 
     async function load() {
       setLoading(true);
       setError(null);
       try {
+        const branchProjectInput = createBranchProjectInput(activeProjectId);
+        const retconInput = createRetconInput(activeProjectId);
+        const historyTarget = createHistoryTarget(activeProjectId);
         const projected = await resolvedClient.projectBranchScenario(branchProjectInput);
         const [adopted, proposal] = await Promise.all([
           resolvedClient.adoptBranchScenario({ canon, scenario: projected.scenario }),
@@ -77,7 +97,7 @@ export function BranchRetconPanel({ client }: BranchRetconPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [resolvedClient]);
+  }, [activeProjectId, hasProject, resolvedClient]);
 
   return (
     <section className="surface-panel" aria-labelledby="branch-retcon-title">
@@ -87,11 +107,16 @@ export function BranchRetconPanel({ client }: BranchRetconPanelProps) {
       </header>
 
       {error ? <p role="alert">{error}</p> : null}
+      {!hasProject ? <p>No project available.</p> : null}
       {loading ? <p>Preparing branch and retcon checks...</p> : null}
 
       <div className="panel-grid">
         <BranchProjectionCard branchResult={branchResult} adoptResult={adoptResult} />
-        <RetconProposalCard retconResult={retconResult} regressionResult={regressionResult} />
+        <RetconProposalCard
+          fallbackRetconInput={createRetconInput(activeProjectId)}
+          retconResult={retconResult}
+          regressionResult={regressionResult}
+        />
       </div>
 
       <PersistedBranchRetconHistory
@@ -178,9 +203,11 @@ function PersistedBranchRetconHistory({
 }
 
 function RetconProposalCard({
+  fallbackRetconInput,
   retconResult,
   regressionResult
 }: {
+  fallbackRetconInput: RetconProposalInput;
   retconResult: RetconProposalResult | null;
   regressionResult: RegressionRunResult | null;
 }) {
@@ -198,11 +225,11 @@ function RetconProposalCard({
           </div>
           <div>
             <dt>Before</dt>
-            <dd>{String(retconResult.proposal.before ?? retconInput.before)}</dd>
+            <dd>{String(retconResult.proposal.before ?? fallbackRetconInput.before)}</dd>
           </div>
           <div>
             <dt>After</dt>
-            <dd>{String(retconResult.proposal.after ?? retconInput.after)}</dd>
+            <dd>{String(retconResult.proposal.after ?? fallbackRetconInput.after)}</dd>
           </div>
           {checks.map((check) => (
             <div key={`${check.scope}-${check.status}`}>
@@ -230,33 +257,39 @@ const canon = {
   artifactIds: ['artifact_draft_1']
 };
 
-const branchProjectInput: BranchProjectInput = {
-  canon,
-  scenario: {
-    projectId: 'project_demo',
-    title: 'Moonlit Archive Branch',
-    baseCanonFactIds: ['canon_archive'],
-    artifacts: [{ id: 'artifact_branch_scene', kind: 'scene', content: 'Mira finds the hidden key.' }]
-  }
-};
+function createBranchProjectInput(projectId: string): BranchProjectInput {
+  return {
+    canon,
+    scenario: {
+      projectId,
+      title: 'Moonlit Archive Branch',
+      baseCanonFactIds: ['canon_archive'],
+      artifacts: [{ id: 'artifact_branch_scene', kind: 'scene', content: 'Mira finds the hidden key.' }]
+    }
+  };
+}
 
-const retconInput: RetconProposalInput = {
-  projectId: 'project_demo',
-  target: { type: 'canon_fact', id: 'canon_archive' },
-  before: 'The door was sealed by the city.',
-  after: 'The door was sealed by Mira mother.',
-  affected: {
-    canonFacts: ['canon_archive'],
-    manuscriptChapters: ['chapter_3'],
-    timelineEvents: ['timeline_event_2'],
-    promises: ['promise_locked_door'],
-    secrets: [],
-    worldRules: []
-  }
-};
+function createRetconInput(projectId: string): RetconProposalInput {
+  return {
+    projectId,
+    target: { type: 'canon_fact', id: 'canon_archive' },
+    before: 'The door was sealed by the city.',
+    after: 'The door was sealed by Mira mother.',
+    affected: {
+      canonFacts: ['canon_archive'],
+      manuscriptChapters: ['chapter_3'],
+      timelineEvents: ['timeline_event_2'],
+      promises: ['promise_locked_door'],
+      secrets: [],
+      worldRules: []
+    }
+  };
+}
 
-const historyTarget = {
-  projectId: 'project_demo',
-  targetType: 'CanonFact',
-  targetId: 'fact_key_location'
-};
+function createHistoryTarget(projectId: string) {
+  return {
+    projectId,
+    targetType: 'CanonFact',
+    targetId: 'fact_key_location'
+  };
+}

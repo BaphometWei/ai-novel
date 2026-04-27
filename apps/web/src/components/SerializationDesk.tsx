@@ -47,7 +47,7 @@ export function SerializationDesk() {
   const plan = useMemo(
     () =>
       createSerializationPlan({
-        projectId: 'project_demo',
+        projectId: 'serialization_demo',
         platformProfile: {
           id: 'platform_qidian',
           name: 'Qidian',

@@ -16,9 +16,8 @@ describe('ImportExportBackupPanel', () => {
   });
 
   it('creates, verifies, and restores backups while showing job, hash, path, status, and rollback info', async () => {
-    render(<ImportExportBackupPanel client={mockBackupClient()} />);
+    render(<ImportExportBackupPanel client={mockBackupClient()} projectId="project_1" />);
 
-    fireEvent.change(screen.getByLabelText('Project id'), { target: { value: 'project_1' } });
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'manual' } });
     fireEvent.change(screen.getByLabelText('Requested by'), { target: { value: 'operator' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create backup' }));
@@ -58,9 +57,8 @@ describe('ImportExportBackupPanel', () => {
   });
 
   it('exports bundles through import-export API when available', async () => {
-    render(<ImportExportBackupPanel client={mockImportExportClient()} />);
+    render(<ImportExportBackupPanel client={mockImportExportClient()} projectId="project_1" />);
 
-    fireEvent.change(screen.getByLabelText('Project id'), { target: { value: 'project_1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Export bundle' }));
 
     const result = await screen.findByLabelText('Export bundle result');
@@ -70,9 +68,8 @@ describe('ImportExportBackupPanel', () => {
 
   it('enqueues an import job with source URI and mode then shows job details', async () => {
     const client = mockImportExportClient();
-    render(<ImportExportBackupPanel client={client} />);
+    render(<ImportExportBackupPanel client={client} projectId="project_1" />);
 
-    fireEvent.change(screen.getByLabelText('Project id'), { target: { value: 'project_1' } });
     fireEvent.change(screen.getByLabelText('Import source URI'), { target: { value: 'memory://bundle.zip' } });
     fireEvent.change(screen.getByLabelText('Import mode'), { target: { value: 'replace' } });
     fireEvent.click(screen.getByRole('button', { name: 'Import bundle' }));
@@ -82,6 +79,45 @@ describe('ImportExportBackupPanel', () => {
     expect(within(result).getByText('Queued')).toBeInTheDocument();
     expect(within(result).getByText('memory://bundle.zip')).toBeInTheDocument();
     expect(within(result).getByText('replace')).toBeInTheDocument();
+  });
+
+  it('shows an empty state and disables project actions when no project is selected', () => {
+    render(<ImportExportBackupPanel client={mockImportExportClient()} />);
+
+    expect(screen.getByText('No project available.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create backup' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export bundle' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Import bundle' })).toBeDisabled();
+  });
+
+  it('keeps a manually entered project id when the selected project arrives later', async () => {
+    const createProjectBackup = vi.fn(async () => createBackupResult);
+    const client: BackupApiClient = {
+      createProjectBackup,
+      verifyBackup: async () => verifyBackupResult,
+      restoreBackup: async () => restoreBackupResult
+    };
+    const { rerender } = render(<ImportExportBackupPanel client={client} />);
+
+    fireEvent.change(screen.getByLabelText('Project id', { exact: true }), {
+      target: { value: 'project_manual' }
+    });
+    rerender(<ImportExportBackupPanel client={client} projectId="project_1" />);
+
+    expect(screen.getByLabelText('Project id', { exact: true })).toHaveValue('project_manual');
+    fireEvent.click(screen.getByRole('button', { name: 'Create backup' }));
+
+    await screen.findByLabelText('Backup create result');
+    expect(createProjectBackup).toHaveBeenCalledWith('project_manual', { reason: '', requestedBy: '' });
+  });
+
+  it('does not sync a selected project while the project id field is focused', () => {
+    const { rerender } = render(<ImportExportBackupPanel client={mockImportExportClient()} />);
+
+    fireEvent.focus(screen.getByLabelText('Project id', { exact: true }));
+    rerender(<ImportExportBackupPanel client={mockImportExportClient()} projectId="project_1" />);
+
+    expect(screen.getByLabelText('Project id', { exact: true })).toHaveValue('');
   });
 });
 

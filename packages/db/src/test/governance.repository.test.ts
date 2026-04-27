@@ -64,4 +64,77 @@ describe('GovernanceRepository', () => {
     ]);
     database.client.close();
   });
+
+  it('lists approval references by source run without including other runs on the same target', async () => {
+    const database = createDatabase(':memory:');
+    await migrateDatabase(database.client);
+    const project = createProject({
+      title: 'Shared Target',
+      language: 'zh-CN',
+      targetAudience: 'Chinese web-novel readers'
+    });
+    await new ProjectRepository(database.db).save(project);
+    const repository = new GovernanceRepository(database.db);
+    const firstAudit = auditAuthorshipTransition({
+      projectId: project.id,
+      source: { type: 'agent_run', id: 'agent_run_first' },
+      actor: { type: 'agent', id: 'agent_writer' },
+      action: 'promote_canon_fact',
+      target: { canonFactId: 'canon_fact_shared' },
+      transition: { from: 'DraftArtifact', to: 'CanonFact' },
+      clock: { now: () => '2026-04-27T12:00:00.000Z' }
+    });
+    const secondAudit = auditAuthorshipTransition({
+      projectId: project.id,
+      source: { type: 'agent_run', id: 'agent_run_second' },
+      actor: { type: 'agent', id: 'agent_writer' },
+      action: 'promote_canon_fact',
+      target: { canonFactId: 'canon_fact_shared' },
+      transition: { from: 'DraftArtifact', to: 'CanonFact' },
+      clock: { now: () => '2026-04-27T12:01:00.000Z' }
+    });
+    const firstReference = approvalReferenceFromAudit(project.id, 'governance_finding_first', firstAudit);
+    const secondReference = approvalReferenceFromAudit(project.id, 'governance_finding_second', secondAudit);
+
+    await repository.saveAuditFinding({
+      id: 'governance_finding_first',
+      projectId: project.id,
+      targetType: 'CanonFact',
+      targetId: 'canon_fact_shared',
+      finding: firstAudit.findings[0],
+      createdAt: firstAudit.findings[0].createdAt
+    });
+    await repository.saveAuditFinding({
+      id: 'governance_finding_second',
+      projectId: project.id,
+      targetType: 'CanonFact',
+      targetId: 'canon_fact_shared',
+      finding: secondAudit.findings[0],
+      createdAt: secondAudit.findings[0].createdAt
+    });
+    await repository.saveApprovalReference(firstReference);
+    await repository.saveApprovalReference(secondReference);
+
+    await expect(repository.listApprovalReferencesBySourceRunId('agent_run_first')).resolves.toEqual([firstReference]);
+    database.client.close();
+  });
 });
+
+function approvalReferenceFromAudit(
+  projectId: string,
+  findingId: string,
+  audit: ReturnType<typeof auditAuthorshipTransition>
+): GovernanceApprovalReference {
+  const approvalRequest = audit.approvalRequests[0];
+  return {
+    id: `${findingId}:approval`,
+    projectId,
+    targetType: approvalRequest.targetType,
+    targetId: approvalRequest.targetId,
+    approvalRequestId: approvalRequest.id,
+    status: approvalRequest.status,
+    riskLevel: approvalRequest.riskLevel,
+    reason: approvalRequest.reason,
+    createdAt: audit.findings[0].createdAt
+  };
+}

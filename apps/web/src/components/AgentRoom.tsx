@@ -204,6 +204,28 @@ function AgentRunDetail({
         <RunGraph steps={detail.graph} />
       </section>
 
+      <section aria-label="Durable job state">
+        <h4>Durable Job</h4>
+        {detail.durableJob ? (
+          <dl className="compact-list">
+            <div>
+              <dt>{detail.durableJob.id}</dt>
+              <dd>
+                <span>{detail.durableJob.status}</span>
+                <span>{detail.durableJob.workflowType}</span>
+                <span>retry {detail.durableJob.retryCount}</span>
+              </dd>
+            </div>
+            <div>
+              <dt>Replay lineage</dt>
+              <dd>{detail.durableJob.lineage.join(' -> ')}</dd>
+            </div>
+          </dl>
+        ) : (
+          <p>No durable job.</p>
+        )}
+      </section>
+
       <section aria-label="Context inspector">
         <h4>Context</h4>
         <ContextInspector contextPack={detail.contextPack} />

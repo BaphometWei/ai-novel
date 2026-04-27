@@ -11,12 +11,15 @@ describe('ProjectDashboard', () => {
   });
 
   it('shows loading state before rendering project data and chapter count from the API client', async () => {
-    render(<ProjectDashboard client={mockClient()} />);
+    const onProjectLoaded = vi.fn();
+
+    render(<ProjectDashboard client={mockClient()} onProjectLoaded={onProjectLoaded} />);
 
     expect(screen.getByText('Loading project...')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Long Night' })).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByText('2 chapters loaded.')).toBeInTheDocument();
+    expect(onProjectLoaded).toHaveBeenCalledWith({ id: 'project_1', title: 'Long Night', status: 'Active' });
   });
 
   it('shows an error state when the project summary cannot be loaded', async () => {

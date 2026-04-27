@@ -143,6 +143,86 @@ describe('persistent API runtime', () => {
     runtime.database.client.close();
   });
 
+  it('exposes persistent Agent Room approvals and durable job lineage for orchestration runs', async () => {
+    const runtime = await createPersistentApiRuntime(':memory:');
+
+    const projectResponse = await runtime.app.inject({
+      method: 'POST',
+      url: '/projects',
+      payload: {
+        title: 'Trace Project',
+        language: 'en-US',
+        targetAudience: 'serial fiction readers'
+      }
+    });
+    const project = projectResponse.json();
+
+    const orchestrationResponse = await runtime.app.inject({
+      method: 'POST',
+      url: '/orchestration/runs',
+      payload: {
+        projectId: project.id,
+        workflowType: 'chapter_creation',
+        taskType: 'chapter_planning',
+        agentRole: 'Planner',
+        taskGoal: 'Plan the traceable chapter',
+        riskLevel: 'High',
+        outputSchema: 'ChapterPlan',
+        promptVersionId: 'prompt_chapter_plan_v1',
+        contextSections: [{ name: 'canon', content: 'The archive bell wakes at dusk.' }]
+      }
+    });
+    expect(orchestrationResponse.statusCode).toBe(201);
+    const orchestration = orchestrationResponse.json();
+
+    const governanceResponse = await runtime.app.inject({
+      method: 'POST',
+      url: '/governance/authorship-audit/inspect',
+      payload: {
+        projectId: project.id,
+        source: { type: 'agent_run', id: orchestration.agentRun.id },
+        actor: { type: 'agent', id: 'planner_agent' },
+        action: 'promote_canon_fact',
+        target: { canonFactId: 'canon_fact_trace' },
+        transition: { from: 'DraftArtifact', to: 'CanonFact' },
+        inspectedAt: '2026-04-27T12:00:00.000Z'
+      }
+    });
+    expect(governanceResponse.statusCode).toBe(200);
+
+    const detailResponse = await runtime.app.inject({
+      method: 'GET',
+      url: `/agent-room/runs/${orchestration.agentRun.id}`
+    });
+
+    expect(detailResponse.statusCode).toBe(200);
+    expect(detailResponse.json()).toMatchObject({
+      run: {
+        id: orchestration.agentRun.id,
+        jobStatus: 'Succeeded',
+        pendingApprovalCount: 1
+      },
+      contextPack: { id: orchestration.contextPack.id },
+      workflowRun: { id: orchestration.workflowRun.id },
+      approvals: [
+        {
+          status: 'Pending',
+          riskLevel: 'High',
+          title: 'Agent-authored canon mutations require approval before changing canon state'
+        }
+      ],
+      durableJob: {
+        id: orchestration.job.id,
+        status: 'Succeeded',
+        retryCount: 0,
+        lineage: [orchestration.job.id]
+      }
+    });
+
+    await runtime.app.close();
+    runtime.database.client.close();
+  });
+
   it('fails closed when OpenAI is configured but the env secret is missing', async () => {
     await expect(
       createPersistentApiRuntime(':memory:', {

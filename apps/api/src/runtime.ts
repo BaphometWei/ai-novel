@@ -192,7 +192,8 @@ export async function createPersistentApiRuntime(
     contextPacks,
     artifacts,
     llmCallLogs,
-    durableJobs
+    durableJobs,
+    governance
   });
   configurePersistentGovernanceRouteStore(governance);
   configurePersistentBranchRetconRouteStore(branchRetcon);
@@ -355,6 +356,7 @@ function createPersistentAgentRoomRepositories(input: {
   artifacts: ArtifactRepository;
   llmCallLogs: LlmCallLogRepository;
   durableJobs: DurableJobRepository;
+  governance: GovernanceRepository;
 }): AgentRoomActionRepositories {
   return {
     agentRuns: {
@@ -380,10 +382,19 @@ function createPersistentAgentRoomRepositories(input: {
       listByRunId: (agentRunId) => input.llmCallLogs.findByAgentRunId(agentRunId as EntityId<'agent_run'>)
     },
     approvals: {
-      listByRunId: async () => []
+      listByRunId: async (agentRunId) =>
+        (await input.governance.listApprovalReferencesBySourceRunId(agentRunId)).map((reference) => ({
+          id: reference.id,
+          runId: agentRunId,
+          title: reference.reason,
+          riskLevel: reference.riskLevel,
+          status: reference.status,
+          createdAt: reference.createdAt
+        }))
     },
     durableJobs: {
       getByAgentRunId: (agentRunId) => input.durableJobs.findByAgentRunId(agentRunId),
+      findReplayLineage: (jobId) => input.durableJobs.findReplayLineage(jobId),
       save: (job) => input.durableJobs.save(job)
     }
   };

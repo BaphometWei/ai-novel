@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createApiClient,
   type BackupApiClient,
@@ -9,6 +9,7 @@ import {
 
 export interface ImportExportBackupPanelProps {
   client?: BackupApiClient & Partial<ImportExportApiClient>;
+  projectId?: string;
 }
 
 type ImportMode = 'merge' | 'replace';
@@ -25,9 +26,12 @@ interface ImportJobResult {
   };
 }
 
-export function ImportExportBackupPanel({ client }: ImportExportBackupPanelProps) {
+export function ImportExportBackupPanel({ client, projectId }: ImportExportBackupPanelProps) {
   const resolvedClient = useMemo(() => client ?? createApiClient(), [client]);
-  const [projectId, setProjectId] = useState('project_default');
+  const initialProjectId = projectId ?? '';
+  const projectIdEditedRef = useRef(false);
+  const projectIdFocusedRef = useRef(false);
+  const [projectIdInput, setProjectIdInput] = useState(initialProjectId);
   const [reason, setReason] = useState('');
   const [requestedBy, setRequestedBy] = useState('');
   const [backupPath, setBackupPath] = useState('');
@@ -40,11 +44,22 @@ export function ImportExportBackupPanel({ client }: ImportExportBackupPanelProps
   const [importResult, setImportResult] = useState<ImportJobResult | null>(null);
   const [exportResult, setExportResult] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
+  const hasProject = projectIdInput.trim().length > 0;
+
+  useEffect(() => {
+    if (!projectIdEditedRef.current && !projectIdFocusedRef.current) setProjectIdInput(projectId ?? '');
+  }, [projectId]);
+
+  function updateProjectIdInput(value: string) {
+    projectIdEditedRef.current = value !== (projectId ?? '');
+    setProjectIdInput(value);
+  }
 
   async function createBackup() {
+    if (!hasProject) return;
     setError(null);
     try {
-      const result = await resolvedClient.createProjectBackup(projectId, { reason, requestedBy });
+      const result = await resolvedClient.createProjectBackup(projectIdInput, { reason, requestedBy });
       setCreateResult(result);
       if (result.record?.path) setBackupPath(result.record.path);
     } catch (caught) {
@@ -53,12 +68,13 @@ export function ImportExportBackupPanel({ client }: ImportExportBackupPanelProps
   }
 
   async function importBundle() {
+    if (!hasProject) return;
     setError(null);
     try {
       if (!('enqueueImportJob' in resolvedClient)) throw new Error('Import/export API unavailable');
       setImportResult(
         (await (resolvedClient as ImportExportApiClient).enqueueImportJob({
-          projectId,
+          projectId: projectIdInput,
           sourceUri: importSourceUri,
           mode: importMode
         })) as ImportJobResult
@@ -69,10 +85,11 @@ export function ImportExportBackupPanel({ client }: ImportExportBackupPanelProps
   }
 
   async function exportBundle() {
+    if (!hasProject) return;
     setError(null);
     try {
       if (!('enqueueExportBundle' in resolvedClient)) throw new Error('Import/export API unavailable');
-      setExportResult(await (resolvedClient as ImportExportApiClient).enqueueExportBundle({ projectId, includeArtifacts: true }));
+      setExportResult(await (resolvedClient as ImportExportApiClient).enqueueExportBundle({ projectId: projectIdInput, includeArtifacts: true }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to export bundle');
     }
@@ -104,11 +121,22 @@ export function ImportExportBackupPanel({ client }: ImportExportBackupPanelProps
       </header>
 
       {error ? <p role="alert">{error}</p> : null}
+      {!hasProject ? <p>No project available.</p> : null}
 
       <section className="work-surface" aria-label="Backup controls">
         <label>
           Project id
-          <input value={projectId} onChange={(event) => setProjectId(event.target.value)} />
+          <input
+            value={projectIdInput}
+            onFocus={() => {
+              projectIdFocusedRef.current = true;
+            }}
+            onBlur={() => {
+              projectIdFocusedRef.current = false;
+              if (!projectIdEditedRef.current) setProjectIdInput(projectId ?? '');
+            }}
+            onChange={(event) => updateProjectIdInput(event.target.value)}
+          />
         </label>
         <label>
           Reason
@@ -118,7 +146,7 @@ export function ImportExportBackupPanel({ client }: ImportExportBackupPanelProps
           Requested by
           <input value={requestedBy} onChange={(event) => setRequestedBy(event.target.value)} />
         </label>
-        <button type="button" onClick={() => void createBackup()}>
+        <button type="button" onClick={() => void createBackup()} disabled={!hasProject}>
           Create backup
         </button>
       </section>
@@ -141,10 +169,10 @@ export function ImportExportBackupPanel({ client }: ImportExportBackupPanelProps
             <option value="replace">replace</option>
           </select>
         </label>
-        <button type="button" onClick={() => void importBundle()}>
+        <button type="button" onClick={() => void importBundle()} disabled={!hasProject}>
           Import bundle
         </button>
-        <button type="button" onClick={() => void exportBundle()}>
+        <button type="button" onClick={() => void exportBundle()} disabled={!hasProject}>
           Export bundle
         </button>
       </section>

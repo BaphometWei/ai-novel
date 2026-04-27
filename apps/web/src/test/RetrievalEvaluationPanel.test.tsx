@@ -13,7 +13,7 @@ describe('RetrievalEvaluationPanel', () => {
     const client = mockRetrievalClient();
     const runProjectRetrievalRegression = vi.mocked(client.runProjectRetrievalRegression);
 
-    render(<RetrievalEvaluationPanel client={client} />);
+    render(<RetrievalEvaluationPanel client={client} projectId="project_1" />);
 
     expect(screen.getByRole('heading', { name: 'Retrieval Evaluation' })).toBeInTheDocument();
     expect(screen.getByText('Running retrieval regression...')).toBeInTheDocument();
@@ -29,16 +29,25 @@ describe('RetrievalEvaluationPanel', () => {
     expect(within(failed).getByText('forbidden_included')).toBeInTheDocument();
     expect(within(failed).getByText('scene_secret')).toBeInTheDocument();
     expect(within(failed).getByText('source_restricted_7')).toBeInTheDocument();
-    expect(runProjectRetrievalRegression).toHaveBeenNthCalledWith(1, 'project_demo', passingRunInput);
-    expect(runProjectRetrievalRegression).toHaveBeenNthCalledWith(2, 'project_demo', failingRunInput);
+    expect(runProjectRetrievalRegression).toHaveBeenNthCalledWith(1, 'project_1', passingRunInput);
+    expect(runProjectRetrievalRegression).toHaveBeenNthCalledWith(2, 'project_1', failingRunInput);
     expect(JSON.stringify(runProjectRetrievalRegression.mock.calls)).not.toContain('included');
     expect(client.evaluateRetrievalRegression).not.toHaveBeenCalled();
   });
 
   it('shows retrieval evaluation errors', async () => {
-    render(<RetrievalEvaluationPanel client={mockRetrievalClient({ reject: true })} />);
+    render(<RetrievalEvaluationPanel client={mockRetrievalClient({ reject: true })} projectId="project_1" />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Retrieval evaluation failed');
+  });
+
+  it('shows an empty state without calling the API when no project is selected', () => {
+    const client = mockRetrievalClient();
+
+    render(<RetrievalEvaluationPanel client={client} />);
+
+    expect(screen.getByText('No project available.')).toBeInTheDocument();
+    expect(client.runProjectRetrievalRegression).not.toHaveBeenCalled();
   });
 });
 

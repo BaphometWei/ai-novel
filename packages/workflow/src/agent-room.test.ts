@@ -109,7 +109,8 @@ const job: DurableJob = {
   workflowType: 'writing',
   payload: { agentRunId: 'agent_run_abc' },
   status: 'Failed',
-  retryCount: 1
+  retryCount: 1,
+  replayOfJobId: 'job_original'
 };
 
 function repositories(): AgentRoomRepositories {
@@ -143,7 +144,8 @@ function repositories(): AgentRoomRepositories {
       ]
     },
     durableJobs: {
-      getByAgentRunId: async () => job
+      getByAgentRunId: async () => job,
+      findReplayLineage: async (jobId) => (jobId === job.id ? ['job_original', job.id] : [])
     }
   };
 }
@@ -195,6 +197,14 @@ describe('Agent Room read model', () => {
         { id: 'artifact_draft', type: 'agent_output', uri: 'artifacts/draft.md' }
       ],
       approvals: [{ id: 'approval_abc', status: 'Pending', riskLevel: 'High' }],
+      durableJob: {
+        id: 'job_abc',
+        status: 'Failed',
+        workflowType: 'writing',
+        retryCount: 1,
+        replayOfJobId: 'job_original',
+        lineage: ['job_original', 'job_abc']
+      },
       costSummary: {
         totalInputTokens: 140,
         totalOutputTokens: 80,
@@ -266,7 +276,7 @@ describe('Agent Room actions', () => {
 
     expect(result).toMatchObject({ action: 'replay', runId: 'agent_run_abc', runStatus: 'Queued', jobStatus: 'Queued' });
     expect(savedRuns[0]).toMatchObject({ id: 'agent_run_abc', status: 'Queued' });
-    expect(savedJobs[0]).toMatchObject({ status: 'Queued', replayOfJobId: 'job_abc' });
+    expect(savedJobs[0]).toMatchObject({ status: 'Queued', replayOfJobId: 'job_original' });
     expect(savedJobs[0].id).not.toBe('job_abc');
   });
 });

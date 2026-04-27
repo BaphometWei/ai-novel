@@ -13,22 +13,32 @@ export interface NarrativeIntelligencePanelProps {
 
 export function NarrativeIntelligencePanel({
   client,
-  projectId = 'project_demo',
+  projectId,
   currentChapter = 7
 }: NarrativeIntelligencePanelProps) {
   const resolvedClient = useMemo(() => client ?? createApiClient(), [client]);
+  const activeProjectId = projectId ?? '';
+  const hasProject = activeProjectId.trim().length > 0;
   const [summary, setSummary] = useState<NarrativeIntelligenceSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(hasProject);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    if (!hasProject) {
+      setSummary(null);
+      setError(null);
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
 
     async function load() {
       setLoading(true);
       setError(null);
       try {
-        const nextSummary = await resolvedClient.getNarrativeIntelligenceSummary(projectId, { currentChapter });
+        const nextSummary = await resolvedClient.getNarrativeIntelligenceSummary(activeProjectId, { currentChapter });
         if (!cancelled) {
           setSummary(nextSummary);
         }
@@ -44,7 +54,7 @@ export function NarrativeIntelligencePanel({
     return () => {
       cancelled = true;
     };
-  }, [currentChapter, projectId, resolvedClient]);
+  }, [activeProjectId, currentChapter, hasProject, resolvedClient]);
 
   const promiseState = summary?.promiseStates[0] ?? null;
   const closureResult = summary?.closure ?? null;
@@ -57,6 +67,7 @@ export function NarrativeIntelligencePanel({
       </header>
 
       {error ? <p role="alert">{error}</p> : null}
+      {!hasProject ? <p>No project available.</p> : null}
       {loading ? <p>Loading narrative intelligence...</p> : null}
 
       <div className="panel-grid">

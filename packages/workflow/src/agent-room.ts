@@ -35,6 +35,7 @@ export interface AgentRoomRepositories {
   };
   durableJobs?: {
     getByAgentRunId(agentRunId: string): Promise<DurableJob | null> | DurableJob | null;
+    findReplayLineage?(jobId: string): Promise<string[]> | string[];
   };
 }
 
@@ -127,6 +128,15 @@ export interface AgentRoomCostSummary {
   calls: AgentRoomCostCall[];
 }
 
+export interface AgentRoomDurableJobView {
+  id: string;
+  workflowType: string;
+  status: DurableJobStatus;
+  retryCount: number;
+  replayOfJobId?: string;
+  lineage: string[];
+}
+
 export interface AgentRoomRunDetail {
   run: AgentRoomRunListItem & {
     contextPackId: string;
@@ -136,6 +146,7 @@ export interface AgentRoomRunDetail {
   contextPack: AgentRoomContextPackView | null;
   artifacts: AgentRoomArtifactView[];
   approvals: AgentRoomApproval[];
+  durableJob: AgentRoomDurableJobView | null;
   costSummary: AgentRoomCostSummary;
 }
 
@@ -162,6 +173,7 @@ export async function buildAgentRoomRunDetail(
 
   const costSummary = summarizeCost(llmCalls);
   const allowedActions = deriveAllowedActions(run.status, job?.status);
+  const durableJob = job ? toDurableJobView(job, await getReplayLineage(repositories, job)) : null;
 
   return {
     run: {
@@ -173,6 +185,7 @@ export async function buildAgentRoomRunDetail(
     contextPack: contextPack ? toContextPackView(contextPack) : null,
     artifacts: artifacts.map(toArtifactView),
     approvals,
+    durableJob,
     costSummary
   };
 }
@@ -325,6 +338,17 @@ function summarizeCost(llmCalls: LlmCallRecord[]): AgentRoomCostSummary {
   };
 }
 
+function toDurableJobView(job: DurableJob, lineage: string[]): AgentRoomDurableJobView {
+  return {
+    id: job.id,
+    workflowType: job.workflowType,
+    status: job.status,
+    retryCount: job.retryCount,
+    replayOfJobId: job.replayOfJobId,
+    lineage
+  };
+}
+
 function deriveAllowedActions(status: AgentRunStatus, jobStatus?: DurableJobStatus): AgentRoomAllowedAction[] {
   if (status === 'Running' || jobStatus === 'Running' || jobStatus === 'Queued' || jobStatus === 'Retrying') {
     return ['cancel'];
@@ -344,6 +368,11 @@ async function listApprovals(repositories: AgentRoomRepositories, runId: string)
 
 async function getJob(repositories: AgentRoomRepositories, runId: string): Promise<DurableJob | null> {
   return repositories.durableJobs ? repositories.durableJobs.getByAgentRunId(runId) : null;
+}
+
+async function getReplayLineage(repositories: AgentRoomRepositories, job: DurableJob): Promise<string[]> {
+  const lineage = await repositories.durableJobs?.findReplayLineage?.(job.id);
+  return lineage && lineage.length > 0 ? lineage : [job.id];
 }
 
 function roundCurrency(value: number): number {

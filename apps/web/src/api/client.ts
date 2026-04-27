@@ -227,6 +227,15 @@ export interface AgentRoomCostSummary {
   calls: AgentRoomCostCall[];
 }
 
+export interface AgentRoomDurableJob {
+  id: string;
+  workflowType: string;
+  status: string;
+  retryCount: number;
+  replayOfJobId?: string;
+  lineage: string[];
+}
+
 export interface ObservabilityModelUsage {
   modelProvider: string;
   modelName: string;
@@ -299,6 +308,7 @@ export interface AgentRoomRunDetail {
   contextPack?: AgentRoomContextPack | null;
   artifacts: AgentRoomArtifact[];
   approvals: AgentRoomApproval[];
+  durableJob?: AgentRoomDurableJob | null;
   costSummary: AgentRoomCostSummary;
 }
 
@@ -1846,6 +1856,16 @@ function adaptAgentRoomRunDetail(value: unknown): AgentRoomRunDetail {
           title: stringOrFallback(approval.title, '')
         }))
       : [],
+    durableJob: isRecord(value.durableJob)
+      ? {
+          id: stringOrFallback(value.durableJob.id, ''),
+          workflowType: stringOrFallback(value.durableJob.workflowType, ''),
+          status: stringOrFallback(value.durableJob.status, ''),
+          retryCount: numberOrFallback(value.durableJob.retryCount, 0),
+          replayOfJobId: typeof value.durableJob.replayOfJobId === 'string' ? value.durableJob.replayOfJobId : undefined,
+          lineage: stringArrayOrEmpty(value.durableJob.lineage)
+        }
+      : null,
     costSummary: {
       totalInputTokens: numberOrFallback(costSummary.totalInputTokens, 0),
       totalOutputTokens: numberOrFallback(costSummary.totalOutputTokens, 0),

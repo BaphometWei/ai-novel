@@ -6,8 +6,6 @@ import {
   type VersionHistorySnapshot
 } from '../api/client';
 
-const defaultProjectId = 'project_1';
-
 function createDefaultSnapshotInput(): VersionHistoryInput {
   return {
     createdAt: new Date().toISOString(),
@@ -24,19 +22,30 @@ export interface VersionHistoryPanelProps {
   projectId?: string;
 }
 
-export function VersionHistoryPanel({ client, projectId = defaultProjectId }: VersionHistoryPanelProps) {
+export function VersionHistoryPanel({ client, projectId }: VersionHistoryPanelProps) {
   const resolvedClient = useMemo(() => client ?? createApiClient(), [client]);
+  const activeProjectId = projectId ?? '';
+  const hasProject = activeProjectId.trim().length > 0;
   const [snapshots, setSnapshots] = useState<VersionHistorySnapshot[]>([]);
   const [selectedSnapshot, setSelectedSnapshot] = useState<VersionHistorySnapshot | null>(null);
-  const [status, setStatus] = useState<'loading' | 'loaded' | 'creating' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'loaded' | 'creating' | 'error'>(hasProject ? 'loading' : 'loaded');
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     let isMounted = true;
+    if (!hasProject) {
+      setSnapshots([]);
+      setSelectedSnapshot(null);
+      setMessage('');
+      setStatus('loaded');
+      return () => {
+        isMounted = false;
+      };
+    }
 
     async function loadSnapshots() {
       try {
-        const items = await resolvedClient.listVersionHistorySnapshots(projectId);
+        const items = await resolvedClient.listVersionHistorySnapshots(activeProjectId);
         if (!isMounted) return;
         setSnapshots(items);
         setSelectedSnapshot(items[0] ?? null);
@@ -53,12 +62,13 @@ export function VersionHistoryPanel({ client, projectId = defaultProjectId }: Ve
     return () => {
       isMounted = false;
     };
-  }, [projectId, resolvedClient]);
+  }, [activeProjectId, hasProject, resolvedClient]);
 
   async function createSnapshot() {
+    if (!hasProject) return;
     setStatus('creating');
     try {
-      const created = await resolvedClient.createVersionHistorySnapshot(projectId, createDefaultSnapshotInput());
+      const created = await resolvedClient.createVersionHistorySnapshot(activeProjectId, createDefaultSnapshotInput());
       setSnapshots((current) => [created, ...current.filter((snapshot) => snapshot.id !== created.id)]);
       setSelectedSnapshot(created);
       setStatus('loaded');
@@ -77,9 +87,10 @@ export function VersionHistoryPanel({ client, projectId = defaultProjectId }: Ve
       </header>
 
       <section className="work-surface" aria-label="Version history controls">
-        <button type="button" onClick={() => void createSnapshot()} disabled={status === 'creating'}>
+        <button type="button" onClick={() => void createSnapshot()} disabled={!hasProject || status === 'creating'}>
           {status === 'creating' ? 'Creating...' : 'Create snapshot'}
         </button>
+        {!hasProject ? <p>No project available.</p> : null}
         {status === 'loading' ? <p>Loading version history...</p> : null}
         {message ? <p>{message}</p> : null}
       </section>

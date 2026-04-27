@@ -32,9 +32,18 @@ describe('NarrativeIntelligencePanel', () => {
   });
 
   it('shows load errors', async () => {
-    render(<NarrativeIntelligencePanel client={mockNarrativeClient({ reject: true })} />);
+    render(<NarrativeIntelligencePanel client={mockNarrativeClient({ reject: true })} projectId="project_1" />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Narrative inspect failed');
+  });
+
+  it('shows an empty state without calling the API when no project is selected', async () => {
+    const client = mockNarrativeClient();
+
+    render(<NarrativeIntelligencePanel client={client} />);
+
+    expect(screen.getByText('No project available.')).toBeInTheDocument();
+    expect(client.getNarrativeIntelligenceSummary).not.toHaveBeenCalled();
   });
 });
 

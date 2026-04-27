@@ -115,7 +115,8 @@ function createRepositories(): AgentRoomRepositories {
       getByAgentRunId: async (agentRunId) =>
         agentRunId === runningRun.id
           ? { id: 'job_room', workflowType: 'chapter_creation', payload: {}, status: 'Running', retryCount: 0 }
-          : null
+          : null,
+      findReplayLineage: async (jobId) => (jobId === 'job_room' ? ['job_original', 'job_room'] : [])
     }
   };
 }
@@ -217,6 +218,13 @@ describe('agent room API routes', () => {
         }
       ],
       approvals: [{ id: 'approval_room', runId: runningRun.id, status: 'Pending', title: 'Publish draft?' }],
+      durableJob: {
+        id: 'job_room',
+        workflowType: 'chapter_creation',
+        status: 'Running',
+        retryCount: 0,
+        lineage: ['job_original', 'job_room']
+      },
       costSummary: {
         totalInputTokens: 1000,
         totalOutputTokens: 300,

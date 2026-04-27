@@ -11,7 +11,7 @@ describe('GovernanceAuditPanel', () => {
 
   it('shows allowed and blocked authorship audit decisions plus approval needs', async () => {
     const client = mockGovernanceClient();
-    render(<GovernanceAuditPanel client={client} />);
+    render(<GovernanceAuditPanel client={client} projectId="project_1" />);
 
     expect(screen.getByRole('heading', { name: 'Governance Audit' })).toBeInTheDocument();
     expect(screen.getByText('Loading governance audit...')).toBeInTheDocument();
@@ -27,8 +27,8 @@ describe('GovernanceAuditPanel', () => {
     expect(within(blocked).getByText('Missing human approval')).toBeInTheDocument();
 
     const history = await screen.findByLabelText('Persisted governance history');
-    expect(client.listAuditFindingsByTarget).toHaveBeenCalledWith('project_demo', 'CanonFact', 'canon_fact_1');
-    expect(client.listApprovalReferencesByTarget).toHaveBeenCalledWith('project_demo', 'CanonFact', 'canon_fact_1');
+    expect(client.listAuditFindingsByTarget).toHaveBeenCalledWith('project_1', 'CanonFact', 'canon_fact_1');
+    expect(client.listApprovalReferencesByTarget).toHaveBeenCalledWith('project_1', 'CanonFact', 'canon_fact_1');
     expect(within(history).getByText('HIGH_RISK_CANON_MUTATION')).toBeInTheDocument();
     expect(within(history).getAllByText('High')).toHaveLength(2);
     expect(within(history).getByText('Pending')).toBeInTheDocument();
@@ -36,9 +36,20 @@ describe('GovernanceAuditPanel', () => {
   });
 
   it('shows audit errors', async () => {
-    render(<GovernanceAuditPanel client={mockGovernanceClient({ reject: true })} />);
+    render(<GovernanceAuditPanel client={mockGovernanceClient({ reject: true })} projectId="project_1" />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Authorship audit failed');
+  });
+
+  it('shows an empty state without calling the API when no project is selected', () => {
+    const client = mockGovernanceClient();
+
+    render(<GovernanceAuditPanel client={client} />);
+
+    expect(screen.getByText('No project available.')).toBeInTheDocument();
+    expect(client.inspectAuthorshipAudit).not.toHaveBeenCalled();
+    expect(client.listAuditFindingsByTarget).not.toHaveBeenCalled();
+    expect(client.listApprovalReferencesByTarget).not.toHaveBeenCalled();
   });
 });
 

@@ -28,6 +28,8 @@ describe('AgentRoom', () => {
     expect(screen.getByText('chapter:12')).toBeInTheDocument();
     expect(screen.getByText('memory://scene-draft')).toBeInTheDocument();
     expect(screen.getByText('Publish draft?')).toBeInTheDocument();
+    expect(screen.getByText('job_room')).toBeInTheDocument();
+    expect(screen.getByText('job_original -> job_room')).toBeInTheDocument();
     expect(screen.getByText('$0.013')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cancel run' })).toBeInTheDocument();
   });
@@ -192,6 +194,13 @@ const agentRunDetail: AgentRoomRunDetail = {
     }
   ],
   approvals: [{ id: 'approval_room', runId: 'agent_run_room', status: 'Pending', title: 'Publish draft?' }],
+  durableJob: {
+    id: 'job_room',
+    workflowType: 'chapter_creation',
+    status: 'Running',
+    retryCount: 0,
+    lineage: ['job_original', 'job_room']
+  },
   costSummary: {
     totalInputTokens: 1000,
     totalOutputTokens: 300,

@@ -1,4 +1,8 @@
-import { expect, test, type Route } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
+
+test.beforeEach(async ({ page }) => {
+  await routeSelectedProject(page);
+});
 
 test('workspace dashboard loads', async ({ page }) => {
   await page.route('**/api/approvals', async (route) => {
@@ -400,7 +404,7 @@ test('observability dashboard exposes cost token latency and adoption signals', 
 });
 
 test('retrieval evaluation shows pass and fail regression evidence', async ({ page }) => {
-  await page.route('**/api/retrieval/projects/project_demo/regression/run', async (route) => {
+  await page.route('**/api/retrieval/projects/project_1/regression/run', async (route) => {
     expect(route.request().method()).toBe('POST');
     const body = await route.request().postDataJSON();
     expect(body.included).toBeUndefined();
@@ -425,7 +429,7 @@ test('retrieval evaluation shows pass and fail regression evidence', async ({ pa
 });
 
 test('narrative intelligence shows reader promise readiness and closure blockers', async ({ page }) => {
-  await page.route('**/api/narrative-intelligence/projects/project_demo/summary?currentChapter=7', async (route) => {
+  await page.route('**/api/narrative-intelligence/projects/project_1/summary?currentChapter=7', async (route) => {
     expect(route.request().method()).toBe('GET');
     await fulfillJson(route, narrativeSummaryResult);
   });
@@ -672,9 +676,33 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
   });
 }
 
+async function routeSelectedProject(page: Page) {
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await fulfillJson(route, [{ id: 'project_1', title: 'Workspace Project' }]);
+  });
+  await page.route('**/api/projects/project_1', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await fulfillJson(route, { id: 'project_1', title: 'Workspace Project', status: 'Active' });
+  });
+  await page.route('**/api/projects/project_1/chapters', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await fulfillJson(route, []);
+  });
+}
+
 const retrievalPassingResult = {
   caseId: 'case_retrieval_pass',
-  projectId: 'project_demo',
+  projectId: 'project_1',
   query: 'archive door clue',
   policyId: 'policy_public_only',
   passed: true,
@@ -686,7 +714,7 @@ const retrievalPassingResult = {
 
 const retrievalFailingResult = {
   caseId: 'case_retrieval_fail',
-  projectId: 'project_demo',
+  projectId: 'project_1',
   query: 'archive door clue',
   policyId: 'policy_public_only',
   passed: false,
@@ -707,7 +735,7 @@ const readerPromiseResult = {
 };
 
 const closureChecklistResult = {
-  projectId: 'project_demo',
+  projectId: 'project_1',
   readyCount: 0,
   blockerCount: 2,
   blockers: [
@@ -717,7 +745,7 @@ const closureChecklistResult = {
 };
 
 const narrativeSummaryResult = {
-  projectId: 'project_demo',
+  projectId: 'project_1',
   currentChapter: 7,
   promiseStates: [
     {
@@ -784,7 +812,7 @@ const scheduledBackupDueResult = {
 const branchProjectResult = {
   scenario: {
     id: 'branch_moonlit_archive',
-    projectId: 'project_demo',
+    projectId: 'project_1',
     title: 'Moonlit Archive Branch',
     baseCanonFactIds: ['canon_archive'],
     artifacts: [{ id: 'artifact_branch_scene', kind: 'scene', content: 'Mira finds the hidden key.' }]

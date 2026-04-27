@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { createApiClient, type FetchImpl } from './api/client';
 import { AgentRoom } from './components/AgentRoom';
 import { AppShell } from './components/AppShell';
@@ -28,10 +28,14 @@ export interface AppProps {
 
 export function App({ apiBaseUrl, fetchImpl }: AppProps = {}) {
   const client = useMemo(() => createApiClient({ baseUrl: apiBaseUrl, fetchImpl }), [apiBaseUrl, fetchImpl]);
+  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const handleProjectLoaded = useCallback((project: { id: string } | null) => {
+    setSelectedProjectId(project?.id ?? '');
+  }, []);
 
   return (
     <AppShell>
-      <ProjectDashboard client={client} />
+      <ProjectDashboard client={client} onProjectLoaded={handleProjectLoaded} />
       <ManuscriptEditor client={client} />
       <StoryBible />
       <ReviewCenter />
@@ -39,14 +43,14 @@ export function App({ apiBaseUrl, fetchImpl }: AppProps = {}) {
       <KnowledgeLibrary />
       <ObservabilityDashboard client={client} />
       <AgentRoom client={client} />
-      <VersionHistoryPanel client={client} />
+      <VersionHistoryPanel client={client} projectId={selectedProjectId} />
       <ReviewLearningPanel client={client} />
-      <NarrativeIntelligencePanel client={client} />
-      <GovernanceAuditPanel client={client} />
-      <RetrievalEvaluationPanel client={client} />
-      <BranchRetconPanel client={client} />
+      <NarrativeIntelligencePanel client={client} projectId={selectedProjectId} />
+      <GovernanceAuditPanel client={client} projectId={selectedProjectId} />
+      <RetrievalEvaluationPanel client={client} projectId={selectedProjectId} />
+      <BranchRetconPanel client={client} projectId={selectedProjectId} />
       <ScheduledBackupPanel client={client} />
-      <ImportExportBackupPanel client={client} />
+      <ImportExportBackupPanel client={client} projectId={selectedProjectId} />
       <SettingsPanel client={client} />
       <DecisionQueuePanel />
     </AppShell>

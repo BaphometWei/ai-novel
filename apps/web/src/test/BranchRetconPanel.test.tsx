@@ -11,7 +11,7 @@ describe('BranchRetconPanel', () => {
 
   it('projects and adopts branch scenarios, proposes retcons, and runs regression checks', async () => {
     const client = mockBranchRetconClient();
-    render(<BranchRetconPanel client={client} />);
+    render(<BranchRetconPanel client={client} projectId="project_1" />);
 
     expect(screen.getByRole('heading', { name: 'Branch & Retcon' })).toBeInTheDocument();
     expect(screen.getByText('Preparing branch and retcon checks...')).toBeInTheDocument();
@@ -29,9 +29,9 @@ describe('BranchRetconPanel', () => {
     expect(within(retcon).getByText('timeline_event_2')).toBeInTheDocument();
 
     const history = await screen.findByLabelText('Persisted branch retcon history');
-    expect(client.listBranchScenarios).toHaveBeenCalledWith('project_demo');
-    expect(client.listRetconProposalsByTarget).toHaveBeenCalledWith('project_demo', 'CanonFact', 'fact_key_location');
-    expect(client.listRegressionCheckRuns).toHaveBeenCalledWith('project_demo', 'retcon_1');
+    expect(client.listBranchScenarios).toHaveBeenCalledWith('project_1');
+    expect(client.listRetconProposalsByTarget).toHaveBeenCalledWith('project_1', 'CanonFact', 'fact_key_location');
+    expect(client.listRegressionCheckRuns).toHaveBeenCalledWith('project_1', 'retcon_1');
     expect(within(history).getByText('branch_scenario_1')).toBeInTheDocument();
     expect(within(history).getByText('Open')).toBeInTheDocument();
     expect(within(history).getByText('retcon_1')).toBeInTheDocument();
@@ -41,9 +41,19 @@ describe('BranchRetconPanel', () => {
   });
 
   it('shows branch and retcon errors', async () => {
-    render(<BranchRetconPanel client={mockBranchRetconClient({ reject: true })} />);
+    render(<BranchRetconPanel client={mockBranchRetconClient({ reject: true })} projectId="project_1" />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Branch projection failed');
+  });
+
+  it('shows an empty state without calling the API when no project is selected', () => {
+    const client = mockBranchRetconClient();
+
+    render(<BranchRetconPanel client={client} />);
+
+    expect(screen.getByText('No project available.')).toBeInTheDocument();
+    expect(client.projectBranchScenario).not.toHaveBeenCalled();
+    expect(client.listBranchScenarios).not.toHaveBeenCalled();
   });
 });
 

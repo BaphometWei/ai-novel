@@ -11,23 +11,34 @@ export interface RetrievalEvaluationPanelProps {
   projectId?: string;
 }
 
-export function RetrievalEvaluationPanel({ client, projectId = 'project_demo' }: RetrievalEvaluationPanelProps) {
+export function RetrievalEvaluationPanel({ client, projectId }: RetrievalEvaluationPanelProps) {
   const resolvedClient = useMemo(() => client ?? createApiClient(), [client]);
+  const activeProjectId = projectId ?? '';
+  const hasProject = activeProjectId.trim().length > 0;
   const [passingResult, setPassingResult] = useState<RetrievalRegressionResult | null>(null);
   const [failingResult, setFailingResult] = useState<RetrievalRegressionResult | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(hasProject);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    if (!hasProject) {
+      setPassingResult(null);
+      setFailingResult(null);
+      setError(null);
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
 
     async function load() {
       setLoading(true);
       setError(null);
       try {
         const [passed, failed] = await Promise.all([
-          resolvedClient.runProjectRetrievalRegression(projectId, passingInput),
-          resolvedClient.runProjectRetrievalRegression(projectId, failingInput)
+          resolvedClient.runProjectRetrievalRegression(activeProjectId, passingInput),
+          resolvedClient.runProjectRetrievalRegression(activeProjectId, failingInput)
         ]);
         if (!cancelled) {
           setPassingResult(passed);
@@ -45,7 +56,7 @@ export function RetrievalEvaluationPanel({ client, projectId = 'project_demo' }:
     return () => {
       cancelled = true;
     };
-  }, [projectId, resolvedClient]);
+  }, [activeProjectId, hasProject, resolvedClient]);
 
   return (
     <section className="surface-panel" aria-labelledby="retrieval-evaluation-title">
@@ -55,6 +66,7 @@ export function RetrievalEvaluationPanel({ client, projectId = 'project_demo' }:
       </header>
 
       {error ? <p role="alert">{error}</p> : null}
+      {!hasProject ? <p>No project available.</p> : null}
       {loading ? <p>Running retrieval regression...</p> : null}
 
       <div className="panel-grid">

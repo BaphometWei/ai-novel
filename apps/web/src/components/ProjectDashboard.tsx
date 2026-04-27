@@ -25,9 +25,10 @@ type DashboardState =
 
 export interface ProjectDashboardProps {
   client?: ApiClient & Partial<SearchApiClient> & Partial<ApprovalsApiClient>;
+  onProjectLoaded?: (project: ProjectSummary | null) => void;
 }
 
-export function ProjectDashboard({ client }: ProjectDashboardProps) {
+export function ProjectDashboard({ client, onProjectLoaded }: ProjectDashboardProps) {
   const resolvedClient = useMemo(() => client ?? createApiClient(), [client]);
   const [state, setState] = useState<DashboardState>({ status: 'loading' });
   const [searchQuery, setSearchQuery] = useState('');
@@ -42,7 +43,10 @@ export function ProjectDashboard({ client }: ProjectDashboardProps) {
         const projects = await resolvedClient.listProjects();
         const currentProject = projects[0];
         if (!currentProject) {
-          if (isMounted) setState({ status: 'loaded', project: null, chapters: [] });
+          if (isMounted) {
+            setState({ status: 'loaded', project: null, chapters: [] });
+            onProjectLoaded?.(null);
+          }
           return;
         }
 
@@ -50,13 +54,17 @@ export function ProjectDashboard({ client }: ProjectDashboardProps) {
           resolvedClient.getProjectSummary(currentProject.id),
           resolvedClient.listProjectChapters(currentProject.id)
         ]);
-        if (isMounted) setState({ status: 'loaded', project, chapters });
+        if (isMounted) {
+          setState({ status: 'loaded', project, chapters });
+          onProjectLoaded?.(project);
+        }
       } catch (error) {
         if (isMounted) {
           setState({
             status: 'error',
             message: error instanceof Error ? error.message : 'Unknown API error'
           });
+          onProjectLoaded?.(null);
         }
       }
     }
@@ -78,7 +86,7 @@ export function ProjectDashboard({ client }: ProjectDashboardProps) {
     return () => {
       isMounted = false;
     };
-  }, [resolvedClient]);
+  }, [onProjectLoaded, resolvedClient]);
 
   const loadedProject = state.status === 'loaded' ? state.project : null;
   const chapterCount = state.status === 'loaded' ? state.chapters.length : 0;

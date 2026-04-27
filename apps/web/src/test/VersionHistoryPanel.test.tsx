@@ -29,6 +29,17 @@ describe('VersionHistoryPanel', () => {
     }));
   });
 
+  it('shows an empty state without calling the API when no project is selected', () => {
+    const client = mockVersionHistoryClient();
+    const listSnapshots = vi.spyOn(client, 'listVersionHistorySnapshots');
+
+    render(<VersionHistoryPanel client={client} />);
+
+    expect(screen.getByText('No project available.')).toBeInTheDocument();
+    expect(listSnapshots).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Create snapshot' })).toBeDisabled();
+  });
+
   it('calls version history routes through the injected fetch implementation', async () => {
     const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const path = String(url);

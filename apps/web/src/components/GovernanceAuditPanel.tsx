@@ -9,27 +9,42 @@ import {
 
 export interface GovernanceAuditPanelProps {
   client?: GovernanceApiClient;
+  projectId?: string;
 }
 
-export function GovernanceAuditPanel({ client }: GovernanceAuditPanelProps) {
+export function GovernanceAuditPanel({ client, projectId }: GovernanceAuditPanelProps) {
   const resolvedClient = useMemo(() => client ?? createApiClient(), [client]);
+  const activeProjectId = projectId ?? '';
+  const hasProject = activeProjectId.trim().length > 0;
   const [allowedResult, setAllowedResult] = useState<AuthorshipAuditResult | null>(null);
   const [blockedResult, setBlockedResult] = useState<AuthorshipAuditResult | null>(null);
   const [auditFindings, setAuditFindings] = useState<PersistedAuditFinding[]>([]);
   const [approvalReferences, setApprovalReferences] = useState<PersistedApprovalReference[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(hasProject);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    if (!hasProject) {
+      setAllowedResult(null);
+      setBlockedResult(null);
+      setAuditFindings([]);
+      setApprovalReferences([]);
+      setError(null);
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
 
     async function load() {
       setLoading(true);
       setError(null);
       try {
+        const historyTarget = createHistoryTarget(activeProjectId);
         const [allowed, blocked, findings, approvals] = await Promise.all([
-          resolvedClient.inspectAuthorshipAudit(allowedAuditInput),
-          resolvedClient.inspectAuthorshipAudit(blockedAuditInput),
+          resolvedClient.inspectAuthorshipAudit(createAllowedAuditInput(activeProjectId)),
+          resolvedClient.inspectAuthorshipAudit(createBlockedAuditInput(activeProjectId)),
           resolvedClient.listAuditFindingsByTarget(historyTarget.projectId, historyTarget.targetType, historyTarget.targetId),
           resolvedClient.listApprovalReferencesByTarget(historyTarget.projectId, historyTarget.targetType, historyTarget.targetId)
         ]);
@@ -51,7 +66,7 @@ export function GovernanceAuditPanel({ client }: GovernanceAuditPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [resolvedClient]);
+  }, [activeProjectId, hasProject, resolvedClient]);
 
   return (
     <section className="surface-panel" aria-labelledby="governance-audit-title">
@@ -61,6 +76,7 @@ export function GovernanceAuditPanel({ client }: GovernanceAuditPanelProps) {
       </header>
 
       {error ? <p role="alert">{error}</p> : null}
+      {!hasProject ? <p>No project available.</p> : null}
       {loading ? <p>Loading governance audit...</p> : null}
 
       <div className="panel-grid">
@@ -134,25 +150,31 @@ function PersistedGovernanceHistory({
   );
 }
 
-const allowedAuditInput = {
-  projectId: 'project_demo',
-  source: { type: 'agent_run', id: 'run_1' },
-  actor: { type: 'user', id: 'user_editor' },
-  action: 'accept_manuscript_version',
-  target: { manuscriptVersionId: 'manuscript_v2' },
-  transition: { from: 'DraftArtifact', to: 'ManuscriptVersion' },
-  inspectedAt: '2026-04-27T12:00:00.000Z'
-};
+function createAllowedAuditInput(projectId: string) {
+  return {
+    projectId,
+    source: { type: 'agent_run', id: 'run_1' },
+    actor: { type: 'user', id: 'user_editor' },
+    action: 'accept_manuscript_version',
+    target: { manuscriptVersionId: 'manuscript_v2' },
+    transition: { from: 'DraftArtifact', to: 'ManuscriptVersion' },
+    inspectedAt: '2026-04-27T12:00:00.000Z'
+  };
+}
 
-const blockedAuditInput = {
-  ...allowedAuditInput,
-  action: 'overwrite_manuscript_version',
-  target: { manuscriptVersionId: 'manuscript_v1' },
-  transition: { from: 'UserAccepted', to: 'ManuscriptVersion' }
-};
+function createBlockedAuditInput(projectId: string) {
+  return {
+    ...createAllowedAuditInput(projectId),
+    action: 'overwrite_manuscript_version',
+    target: { manuscriptVersionId: 'manuscript_v1' },
+    transition: { from: 'UserAccepted', to: 'ManuscriptVersion' }
+  };
+}
 
-const historyTarget = {
-  projectId: 'project_demo',
-  targetType: 'CanonFact',
-  targetId: 'canon_fact_1'
-};
+function createHistoryTarget(projectId: string) {
+  return {
+    projectId,
+    targetType: 'CanonFact',
+    targetId: 'canon_fact_1'
+  };
+}

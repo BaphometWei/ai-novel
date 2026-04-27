@@ -1,5 +1,5 @@
 import type { ApprovalRequest, AuthorshipAuditFinding } from '@ai-novel/domain';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import type { AppDatabase } from '../connection';
 import { governanceApprovalReferences, governanceAuditFindings } from '../schema';
 
@@ -95,5 +95,26 @@ export class GovernanceRepository {
       )
       .orderBy(asc(governanceApprovalReferences.createdAt), asc(governanceApprovalReferences.id))
       .all() as Promise<GovernanceApprovalReference[]>;
+  }
+
+  async listApprovalReferencesBySourceRunId(agentRunId: string): Promise<GovernanceApprovalReference[]> {
+    const findingRows = await this.db
+      .select()
+      .from(governanceAuditFindings)
+      .where(sql`json_extract(${governanceAuditFindings.findingJson}, '$.source.id') = ${agentRunId}`)
+      .all();
+
+    const approvalReferenceIds = new Set(findingRows.map((row) => `${row.id}:approval`));
+    const references = (
+      await Promise.all(
+        findingRows.map((row) =>
+          this.listApprovalReferencesByTarget(row.projectId, row.targetType, row.targetId)
+        )
+      )
+    ).flat().filter((reference) => approvalReferenceIds.has(reference.id));
+    const uniqueById = new Map(references.map((reference) => [reference.id, reference]));
+    return [...uniqueById.values()].sort((left, right) =>
+      left.createdAt === right.createdAt ? left.id.localeCompare(right.id) : left.createdAt.localeCompare(right.createdAt)
+    );
   }
 }
