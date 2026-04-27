@@ -23,7 +23,19 @@ export class FilesystemArtifactStore implements ArtifactStore {
   }
 
   async readText(uri: string): Promise<string> {
-    return readFile(this.resolveInsideRoot(uri), 'utf8');
+    const content = await readFile(this.resolveInsideRoot(uri), 'utf8');
+    const expectedDigest = basename(uri).match(/^([a-f0-9]{64})-/)?.[1];
+    if (!expectedDigest) {
+      throw new Error('Artifact URI does not include a sha256 content hash');
+    }
+
+    const actualHash = sha256(content);
+    const expectedHash = `sha256:${expectedDigest}`;
+    if (actualHash !== expectedHash) {
+      throw new Error(`Artifact content hash mismatch: expected ${expectedHash}, got ${actualHash}`);
+    }
+
+    return content;
   }
 
   private resolveInsideRoot(uri: string): string {

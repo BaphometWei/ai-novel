@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 import { registerBackupRoutes } from '../routes/backup.routes';
+import { createPersistentApiRuntime } from '../runtime';
 import type { BackupWorkflowDependencies } from '@ai-novel/workflow';
 
 describe('backup API routes', () => {
@@ -78,6 +79,62 @@ describe('backup API routes', () => {
     });
     expect(deps.repository.restoredPayloads).toEqual([]);
     expect(deps.repository.restores).toEqual([]);
+  });
+
+  it('uses persistent backup dependencies in the production runtime', async () => {
+    const runtime = await createPersistentApiRuntime(':memory:');
+    try {
+      const projectResponse = await runtime.app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: {
+          title: 'Persistent Archive',
+          language: 'en-US',
+          targetAudience: 'serial fiction readers'
+        }
+      });
+      const project = projectResponse.json();
+
+      const backupResponse = await runtime.app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/backups`,
+        payload: { reason: 'manual', requestedBy: 'operator' }
+      });
+
+      expect(backupResponse.statusCode).toBe(201);
+      const backup = backupResponse.json();
+      expect(backup.record.path).not.toMatch(/^memory:\/\//);
+
+      const verifyResponse = await runtime.app.inject({
+        method: 'POST',
+        url: '/backups/verify',
+        payload: { path: backup.record.path }
+      });
+
+      expect(verifyResponse.statusCode).toBe(200);
+      expect(verifyResponse.json()).toMatchObject({
+        record: { path: backup.record.path, projectId: project.id },
+        status: { ok: true, stage: 'verified', hash: backup.record.hash }
+      });
+
+      const restoreResponse = await runtime.app.inject({
+        method: 'POST',
+        url: '/backups/restore',
+        payload: { path: backup.record.path, targetProjectId: 'project_restored', requestedBy: 'operator' }
+      });
+      const restoredProjectResponse = await runtime.app.inject({ method: 'GET', url: '/projects/project_restored' });
+
+      expect(restoreResponse.statusCode).toBe(200);
+      expect(restoreResponse.json()).toMatchObject({
+        record: { targetProjectId: 'project_restored', backupId: backup.record.id },
+        status: { ok: true, stage: 'restored', hash: backup.record.hash }
+      });
+      expect(restoredProjectResponse.statusCode).toBe(200);
+      expect(restoredProjectResponse.json()).toMatchObject({ id: 'project_restored', title: 'Persistent Archive' });
+    } finally {
+      await runtime.app.close();
+      runtime.database.client.close();
+    }
   });
 });
 

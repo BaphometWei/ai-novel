@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -21,6 +21,17 @@ describe('FilesystemArtifactStore', () => {
     const store = new FilesystemArtifactStore(root);
 
     await expect(store.readText('../outside.txt')).rejects.toThrow('Artifact URI escapes store root');
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('rejects content tampered with on disk', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ai-novel-artifacts-'));
+    const store = new FilesystemArtifactStore(root);
+
+    const written = await store.writeText('context-pack.json', '{"task":"draft"}');
+    await writeFile(join(root, written.uri), '{"task":"tampered"}', 'utf8');
+
+    await expect(store.readText(written.uri)).rejects.toThrow('Artifact content hash mismatch');
     await rm(root, { recursive: true, force: true });
   });
 });

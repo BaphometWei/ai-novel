@@ -218,6 +218,25 @@ describe('writing workbench', () => {
     });
   });
 
+  it('disables chapter creation until an API project is loaded', async () => {
+    let resolveProjects: (projects: Array<{ id: string; title: string }>) => void = () => undefined;
+    const projectsPromise = new Promise<Array<{ id: string; title: string }>>((resolve) => {
+      resolveProjects = resolve;
+    });
+    const client = createWritingClient({
+      listProjects: vi.fn(async () => projectsPromise),
+      listProjectChapters: vi.fn(async () => [])
+    });
+
+    render(<ManuscriptEditor client={client} />);
+
+    const createButton = screen.getByRole('button', { name: 'New chapter' });
+    expect(createButton).toBeDisabled();
+
+    resolveProjects([{ id: 'project_api', title: 'API Project' }]);
+    await waitFor(() => expect(createButton).toBeEnabled());
+  });
+
   it('renders a manuscript chapter tree and editor surface', () => {
     render(<ManuscriptEditor />);
 

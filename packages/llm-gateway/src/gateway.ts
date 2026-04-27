@@ -1,5 +1,6 @@
 import type { ProviderAdapter } from '@ai-novel/domain';
 import { assertWithinBudget, estimatePromptTokens, type BudgetPolicy } from './budget-guard';
+import { redactSecrets } from './redaction';
 
 export interface LlmGatewayOptions {
   provider: ProviderAdapter;
@@ -45,14 +46,15 @@ export class LlmGateway {
         model
       });
     } catch (error) {
+      const safeError = this.toSafeError(error);
       this.logCall({
         model,
         usage: preflightUsage,
         durationMs: Date.now() - startedAt,
         status: 'Failed',
-        error: this.formatError(error)
+        error: safeError.message
       });
-      throw error;
+      throw safeError;
     }
     this.logCall({
       model,
@@ -85,6 +87,7 @@ export class LlmGateway {
           model
         });
       } catch (error) {
+        const safeError = this.toSafeError(error);
         this.logCall({
           model,
           schemaName: input.schemaName,
@@ -92,9 +95,9 @@ export class LlmGateway {
           durationMs: Date.now() - startedAt,
           retryCount: repairAttempts.length,
           status: 'Failed',
-          error: this.formatError(error)
+          error: safeError.message
         });
-        throw error;
+        throw safeError;
       }
       lastUsage = result.usage;
       const isValid = input.validate ? input.validate(result.value) : true;
@@ -159,14 +162,15 @@ export class LlmGateway {
         }
       }
     } catch (error) {
+      const safeError = this.toSafeError(error);
       this.logCall({
         model,
         usage: usage ?? preflightUsage,
         durationMs: Date.now() - startedAt,
         status: 'Failed',
-        error: this.formatError(error)
+        error: safeError.message
       });
-      throw error;
+      throw safeError;
     }
     const finalUsage = usage ?? {
       inputTokens: estimatePromptTokens(input.prompt),
@@ -191,14 +195,15 @@ export class LlmGateway {
         model
       });
     } catch (error) {
+      const safeError = this.toSafeError(error);
       this.logCall({
         model,
         usage: preflightUsage,
         durationMs: Date.now() - startedAt,
         status: 'Failed',
-        error: this.formatError(error)
+        error: safeError.message
       });
-      throw error;
+      throw safeError;
     }
     this.logCall({
       model,
@@ -234,14 +239,15 @@ export class LlmGateway {
         estimateCost: (estimate) => this.options.provider.estimateCost(estimate)
       });
     } catch (error) {
+      const safeError = this.toSafeError(error);
       this.logCall({
         model,
         usage,
         durationMs: 0,
         status: 'Failed',
-        error: this.formatError(error)
+        error: safeError.message
       });
-      throw error;
+      throw safeError;
     }
     return usage;
   }
@@ -257,7 +263,13 @@ export class LlmGateway {
   }
 
   private formatError(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
+    return redactSecrets(error instanceof Error ? error.message : String(error));
+  }
+
+  private toSafeError(error: unknown): Error {
+    return error instanceof Error
+      ? new Error(this.formatError(error), { cause: error })
+      : new Error(this.formatError(error));
   }
 
   private logCall(input: {

@@ -14,7 +14,8 @@
     "test:e2e": "playwright test",
     "dev:api": "npm --workspace @ai-novel/api run dev",
     "dev:web": "npm --workspace @ai-novel/web run dev",
-    "db:check": "npm --workspace @ai-novel/db run db:check"
+    "db:check": "npm --workspace @ai-novel/db run db:check",
+    "verify:local": "node scripts/verify-local-production.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",

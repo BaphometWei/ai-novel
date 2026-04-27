@@ -191,7 +191,7 @@ export function ManuscriptEditor({ client }: ManuscriptEditorProps) {
       <div className="manuscript-layout">
         <aside className="chapter-tree" aria-label="Chapter tree" role="tree">
           {client ? (
-            <button className="chapter-node" type="button" onClick={() => void createChapter()}>
+            <button className="chapter-node" type="button" onClick={() => void createChapter()} disabled={!projectId}>
               New chapter
             </button>
           ) : null}

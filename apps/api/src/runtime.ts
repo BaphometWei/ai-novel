@@ -31,10 +31,15 @@ import {
   WorkflowRunRepository
 } from '@ai-novel/db';
 import { FilesystemArtifactStore } from '@ai-novel/artifacts';
-import type { EntityId, ProviderAdapter } from '@ai-novel/domain';
-import type { AgentRoomActionRepositories, ScheduledBackupPolicy } from '@ai-novel/workflow';
-import { randomUUID } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
+import { createProjectBundle, type EntityId, type Project, type ProviderAdapter } from '@ai-novel/domain';
+import type {
+  AgentRoomActionRepositories,
+  BackupRecord,
+  BackupWorkflowDependencies,
+  ScheduledBackupPolicy
+} from '@ai-novel/workflow';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { buildApp } from './app';
@@ -196,6 +201,12 @@ export async function createPersistentApiRuntime(
     store: reviewLearning
   };
   const searchStore = createRepositorySearchStore(search);
+  const backup = createPersistentBackupDependencies({
+    root: resolveBackupRoot(filename),
+    projects: projectRepository,
+    bundles: projectBundles,
+    durableJobs
+  });
 
   return {
     app: buildApp({
@@ -204,6 +215,7 @@ export async function createPersistentApiRuntime(
       approvals: createRepositoryApprovalStore(memory),
       artifacts,
       artifactContent,
+      backup,
       contextPacks,
       migrationHistory,
       narrativeIntelligence: {
@@ -227,6 +239,112 @@ export async function createPersistentApiRuntime(
     }),
     database,
     stores
+  };
+}
+
+function createPersistentBackupDependencies(input: {
+  root: string;
+  projects: ProjectRepository;
+  bundles: ProjectBundleRepository;
+  durableJobs: DurableJobRepository;
+}): BackupWorkflowDependencies {
+  const store = createFilesystemBackupStore(input.root);
+
+  return {
+    clock: { now: () => new Date().toISOString() },
+    ids: {
+      createJobId: () => createLocalId('backup_job'),
+      createBackupId: () => createLocalId('backup'),
+      createRestoreId: () => createLocalId('restore')
+    },
+    hash: (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex'),
+    store,
+    repository: {
+      async readProjectSnapshot(projectId) {
+        const project = await input.projects.findById(projectId);
+        if (!project) throw new Error('Project not found');
+        return { project, exportedAt: new Date().toISOString() };
+      },
+      backupPathFor(backupId) {
+        return join('backups', `${backupId}.json`);
+      },
+      async saveBackupRecord(record) {
+        await input.bundles.saveBackup({
+          path: record.path,
+          bundle: createProjectBundle({
+            project: {
+              id: record.projectId,
+              backupWorkflowRecord: record
+            },
+            settingsSnapshot: { backupWorkflowRecord: record },
+            createdAt: record.createdAt
+          }),
+          createdAt: record.createdAt
+        });
+      },
+      async findBackupByPath(path) {
+        const bundle = await input.bundles.findBackupByPath(path);
+        return readBackupRecordFromBundle(bundle?.settingsSnapshot);
+      },
+      async restoreProject(targetProjectId, payload) {
+        await input.projects.save(projectFromBackupPayload(targetProjectId, payload));
+      },
+      async saveRestoreRecord(record) {
+        await input.durableJobs.save({
+          id: record.id,
+          workflowType: 'backup.restore',
+          payload: { ...record },
+          status: 'Succeeded',
+          retryCount: 0
+        });
+      }
+    }
+  };
+}
+
+function createFilesystemBackupStore(root: string): BackupWorkflowDependencies['store'] {
+  const rootPath = resolve(root);
+  return {
+    async writeText(path, content) {
+      const absolutePath = resolveInsideRoot(rootPath, path);
+      await mkdir(dirname(absolutePath), { recursive: true });
+      await writeFile(absolutePath, content, 'utf8');
+    },
+    async readText(path) {
+      return readFile(resolveInsideRoot(rootPath, path), 'utf8');
+    }
+  };
+}
+
+function resolveInsideRoot(rootPath: string, path: string): string {
+  const absolutePath = resolve(rootPath, path);
+  if (absolutePath !== rootPath && !absolutePath.startsWith(`${rootPath}\\`) && !absolutePath.startsWith(`${rootPath}/`)) {
+    throw new Error('Backup path escapes store root');
+  }
+  return absolutePath;
+}
+
+function readBackupRecordFromBundle(snapshot: Record<string, unknown> | undefined): BackupRecord | undefined {
+  const record = snapshot?.backupWorkflowRecord;
+  if (!record || typeof record !== 'object') return undefined;
+  return record as BackupRecord;
+}
+
+function projectFromBackupPayload(targetProjectId: string, payload: unknown): Project {
+  const snapshot = payload as { project?: Partial<Project> };
+  const source = snapshot?.project;
+  if (!source?.title || !source.language || !source.status || !source.readerContract || !source.createdAt || !source.updatedAt) {
+    throw new Error('Backup payload does not contain a restorable project');
+  }
+
+  return {
+    id: targetProjectId as Project['id'],
+    title: source.title,
+    language: source.language,
+    status: source.status,
+    readerContract: source.readerContract,
+    createdAt: source.createdAt,
+    updatedAt: new Date().toISOString()
   };
 }
 
@@ -303,6 +421,18 @@ function resolveArtifactRoot(filename: string): string {
   }
 
   return resolve(dirname(resolve(filename)), 'artifacts');
+}
+
+function resolveBackupRoot(filename: string): string {
+  if (filename === ':memory:') {
+    return join(tmpdir(), `ai-novel-backups-${randomUUID()}`);
+  }
+
+  return resolve(dirname(resolve(filename)), 'backups');
+}
+
+function createLocalId(prefix: string): string {
+  return `${prefix}_${randomUUID().replace(/-/g, '')}`;
 }
 
 async function seedDefaultPromptVersions(promptVersions: PromptVersionRepository): Promise<void> {

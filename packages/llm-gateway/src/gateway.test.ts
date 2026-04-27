@@ -104,7 +104,7 @@ describe('LlmGateway', () => {
       promptVersionId: 'writer.v2.1'
     });
 
-    await expect(gateway.generateText({ prompt: 'Draft a scene' })).rejects.toBe(providerError);
+    await expect(gateway.generateText({ prompt: 'Draft a scene' })).rejects.toThrow('provider unavailable');
 
     expect(gateway.callLog[0]).toMatchObject({
       promptVersionId: 'writer.v2.1',
@@ -114,6 +114,36 @@ describe('LlmGateway', () => {
       status: 'Failed',
       error: 'provider unavailable'
     });
+  });
+
+  it('redacts secrets from logged provider errors before rethrowing', async () => {
+    const provider = createFakeProvider({
+      text: 'unused',
+      structured: {},
+      embedding: [0.1]
+    });
+    const providerError = new Error(
+      'provider failed for sk-local-test-secret with Bearer sk-another-test-secret and api_key="plain-secret"'
+    );
+    provider.generateText = async () => {
+      throw providerError;
+    };
+    const gateway = new LlmGateway({
+      provider,
+      defaultModel: 'fake-model',
+      promptVersionId: 'writer.v2.1'
+    });
+
+    await expect(gateway.generateText({ prompt: 'Draft a scene' })).rejects.toThrow(
+      'provider failed for [REDACTED] with Bearer [REDACTED] and api_key="[REDACTED]"'
+    );
+
+    expect(gateway.callLog[0]?.error).toBe(
+      'provider failed for [REDACTED] with Bearer [REDACTED] and api_key="[REDACTED]"'
+    );
+    expect(gateway.callLog[0]?.error).not.toContain('sk-local-test-secret');
+    expect(gateway.callLog[0]?.error).not.toContain('sk-another-test-secret');
+    expect(gateway.callLog[0]?.error).not.toContain('plain-secret');
   });
 
   it('logs failed structured provider calls before rethrowing', async () => {
@@ -137,7 +167,7 @@ describe('LlmGateway', () => {
         prompt: 'Plan chapter',
         schemaName: 'ChapterPlan'
       })
-    ).rejects.toBe(providerError);
+    ).rejects.toThrow('invalid JSON from provider');
 
     expect(gateway.callLog[0]).toMatchObject({
       promptVersionId: 'writer.v2.1',
@@ -166,7 +196,7 @@ describe('LlmGateway', () => {
       promptVersionId: 'writer.v2.1'
     });
 
-    await expect(gateway.embedText({ text: 'Hero is injured.' })).rejects.toBe(providerError);
+    await expect(gateway.embedText({ text: 'Hero is injured.' })).rejects.toThrow('embedding provider unavailable');
 
     expect(gateway.callLog[0]).toMatchObject({
       promptVersionId: 'writer.v2.1',
@@ -200,7 +230,7 @@ describe('LlmGateway', () => {
       }
     };
 
-    await expect(consume()).rejects.toBe(providerError);
+    await expect(consume()).rejects.toThrow('stream provider unavailable');
     expect(gateway.callLog[0]).toMatchObject({
       promptVersionId: 'writer.v2.1',
       provider: 'fake',
@@ -232,7 +262,7 @@ describe('LlmGateway', () => {
       for await (const chunk of gateway.streamText({ prompt: 'continue' })) chunks.push(chunk);
     };
 
-    await expect(consume()).rejects.toBe(providerError);
+    await expect(consume()).rejects.toThrow('stream interrupted');
     expect(chunks.join('')).toBe('A B');
     expect(gateway.callLog[0]).toMatchObject({
       promptVersionId: 'writer.v2.1',

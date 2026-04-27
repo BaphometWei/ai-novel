@@ -1,4 +1,5 @@
 import type { ProviderAdapter, TokenUsage } from '@ai-novel/domain';
+import { redactSecrets } from './redaction';
 
 type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -37,9 +38,15 @@ function usageFromOpenAI(response: ChatCompletionResponse): TokenUsage {
   };
 }
 
+async function openAIResponseError(response: Response): Promise<Error> {
+  const body = await response.text();
+  const details = body ? `: ${redactSecrets(body)}` : '';
+  return new Error(`OpenAI request failed with status ${response.status}${details}`);
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    throw new Error(`OpenAI request failed with status ${response.status}`);
+    throw await openAIResponseError(response);
   }
   return (await response.json()) as T;
 }
@@ -72,7 +79,7 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ProviderAd
       body: JSON.stringify(body)
     });
     if (!response.ok) {
-      throw new Error(`OpenAI request failed with status ${response.status}`);
+      throw await openAIResponseError(response);
     }
     return response;
   }

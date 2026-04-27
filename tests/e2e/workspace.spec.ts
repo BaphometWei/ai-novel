@@ -911,23 +911,34 @@ const importJobResult = {
   }
 };
 
-test('backup panel creates, verifies, and restores a portable bundle', async ({ page }) => {
+test('backup panel creates, verifies, and restores a portable bundle', async ({ page, request }) => {
+  const projectResponse = await request.post('http://127.0.0.1:4000/projects', {
+    data: {
+      title: 'Backup E2E Project',
+      language: 'en-US',
+      targetAudience: 'serial fiction readers'
+    }
+  });
+  expect(projectResponse.status()).toBe(201);
+  const project = await projectResponse.json();
+  const restoredProjectId = `project_e2e_restored_${Date.now()}`;
+
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: 'Portable Bundle Desk' })).toBeVisible();
-  await page.getByLabel('Project id', { exact: true }).fill('project_e2e');
+  await page.getByLabel('Project id', { exact: true }).fill(project.id);
   await page.getByLabel('Reason').fill('e2e verification');
   await page.getByLabel('Requested by').fill('playwright');
   await page.getByRole('button', { name: 'Create backup' }).click();
 
   await expect(page.getByLabel('Backup create result')).toContainText('created');
-  await expect(page.getByLabel('Backup create result')).toContainText('memory://');
+  await expect(page.getByLabel('Backup create result')).toContainText(/backups[\\/]/);
 
   await page.getByRole('button', { name: 'Verify backup' }).click();
   await expect(page.getByLabel('Backup verify result')).toContainText('verified');
 
-  await page.getByLabel('Target project id', { exact: true }).fill('project_e2e_restored');
+  await page.getByLabel('Target project id', { exact: true }).fill(restoredProjectId);
   await page.getByRole('button', { name: 'Restore backup' }).click();
   await expect(page.getByLabel('Backup restore result')).toContainText('restored');
-  await expect(page.getByLabel('Backup restore result')).toContainText('project_e2e_restored');
+  await expect(page.getByLabel('Backup restore result')).toContainText(restoredProjectId);
 });

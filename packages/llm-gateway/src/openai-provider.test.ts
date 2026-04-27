@@ -105,4 +105,24 @@ describe('OpenAI provider adapter', () => {
     expect(chunks).toEqual(['Hel', 'lo']);
     expect(usage).toEqual({ inputTokens: 2, outputTokens: 2 });
   });
+
+  it('redacts secrets from non-ok response errors', async () => {
+    const provider = createOpenAIProvider({
+      apiKey: 'sk-local-test-secret',
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            error: 'invalid apiKey="body-secret" for Bearer sk-response-secret'
+          }),
+          { status: 401, headers: { 'content-type': 'application/json' } }
+        )
+    });
+
+    await expect(provider.generateText({ model: 'gpt-test', prompt: 'write' })).rejects.toThrow(
+      'OpenAI request failed with status 401: {"error":"invalid apiKey=\\"[REDACTED]\\" for Bearer [REDACTED]"}'
+    );
+    await expect(provider.generateText({ model: 'gpt-test', prompt: 'write' })).rejects.not.toThrow(
+      /body-secret|sk-response-secret|sk-local-test-secret/
+    );
+  });
 });

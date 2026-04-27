@@ -4,3 +4,4 @@ export * from './gateway';
 export * from './openai-provider';
 export * from './provider-config';
 export * from './prompt-registry';
+export * from './redaction';
