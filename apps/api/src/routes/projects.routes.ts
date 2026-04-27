@@ -9,6 +9,8 @@ const createProjectSchema = z.object({
 });
 
 export function registerProjectRoutes(app: FastifyInstance, service: ProjectServiceLike = new ProjectService()) {
+  app.get('/projects', async () => service.list());
+
   app.post('/projects', async (request, reply) => {
     const parsed = createProjectSchema.safeParse(request.body);
     if (!parsed.success) {

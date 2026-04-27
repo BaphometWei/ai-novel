@@ -27,6 +27,32 @@ describe('Change impact reports', () => {
       timelineEvents: ['timeline_event_1']
     });
   });
+
+  it('deduplicates affected objects when multiple dependency entries point at the same impacted narrative object', () => {
+    const target = { type: 'CanonFact', id: 'canon_fact_origin' };
+    const entries = [
+      dependency('Chapter', 'chapter_1', target.id),
+      dependency('Chapter', 'chapter_1', target.id),
+      dependency('ReaderPromise', 'reader_promise_1', target.id),
+      dependency('ReaderPromise', 'reader_promise_1', target.id),
+      dependency('Secret', 'secret_1', target.id),
+      dependency('CharacterArc', 'character_arc_1', target.id),
+      dependency('WorldRule', 'world_rule_1', target.id),
+      dependency('TimelineEvent', 'timeline_event_1', target.id),
+      dependency('TimelineEvent', 'timeline_event_1', target.id)
+    ];
+
+    const report = buildCanonChangeImpactReport(entries, target);
+
+    expect(report.affected).toEqual({
+      chapters: ['chapter_1'],
+      promises: ['reader_promise_1'],
+      secrets: ['secret_1'],
+      arcs: ['character_arc_1'],
+      rules: ['world_rule_1'],
+      timelineEvents: ['timeline_event_1']
+    });
+  });
 });
 
 function dependency(sourceType: string, sourceId: string, targetId: string) {

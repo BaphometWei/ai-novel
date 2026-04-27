@@ -21,6 +21,25 @@ describe('Secrets and reveals', () => {
     expect(canCharacterUseSecret(secret, 'mei', knowledge)).toBe(false);
   });
 
+  it('prevents a character from using a different secret knowledge state', () => {
+    const secret = createSecret({
+      id: 'secret_heir_identity',
+      projectId: 'project_abc',
+      title: 'Mei is the lost heir',
+      hiddenTruth: 'Mei is the lost heir to the western court',
+      status: 'Hidden'
+    });
+
+    const wrongKnowledge = createKnowledgeState({
+      secretId: 'secret_traitor',
+      characterKnowledge: {
+        mei: { state: 'Knows', learnedAtChapter: 4 }
+      }
+    });
+
+    expect(canCharacterUseSecret(secret, 'mei', wrongKnowledge)).toBe(false);
+  });
+
   it('updates reader and character knowledge separately when a reveal occurs', () => {
     const secret = createSecret({
       id: 'secret_traitor',

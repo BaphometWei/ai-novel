@@ -35,6 +35,15 @@ export class ProjectBundleRepository {
     });
   }
 
+  async findBackupByPath(path: string): Promise<ProjectBundle | null> {
+    const row = await this.db.select().from(projectBundleBackups).where(eq(projectBundleBackups.path, path)).get();
+    if (!row) return null;
+
+    const bundle = JSON.parse(row.bundleJson) as ProjectBundle;
+    if (hashProjectBundle(bundle) !== bundle.hash) throw new Error('Project bundle hash mismatch');
+    return bundle;
+  }
+
   async findBundleByHash(hash: string): Promise<ProjectBundle | null> {
     const row = await this.db.select().from(projectBundleBackups).where(eq(projectBundleBackups.hash, hash)).get();
     if (!row) return null;

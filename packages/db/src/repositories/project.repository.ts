@@ -1,5 +1,5 @@
 import type { Project } from '@ai-novel/domain';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import type { AppDatabase } from '../connection';
 import { projects } from '../schema';
 
@@ -18,18 +18,27 @@ export class ProjectRepository {
     });
   }
 
+  async list(): Promise<Project[]> {
+    const rows = await this.db.select().from(projects).orderBy(asc(projects.createdAt)).all();
+    return rows.map(projectFromRow);
+  }
+
   async findById(id: string): Promise<Project | null> {
     const row = await this.db.select().from(projects).where(eq(projects.id, id)).get();
     if (!row) return null;
 
-    return {
-      id: row.id as Project['id'],
-      title: row.title,
-      language: row.language as Project['language'],
-      status: row.status as Project['status'],
-      readerContract: JSON.parse(row.readerContractJson) as Project['readerContract'],
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt
-    };
+    return projectFromRow(row);
   }
+}
+
+function projectFromRow(row: typeof projects.$inferSelect): Project {
+  return {
+    id: row.id as Project['id'],
+    title: row.title,
+    language: row.language as Project['language'],
+    status: row.status as Project['status'],
+    readerContract: JSON.parse(row.readerContractJson) as Project['readerContract'],
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
+  };
 }

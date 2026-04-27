@@ -1,5 +1,7 @@
 export interface VectorSearchResult {
   id: string;
+  sourceId: string;
+  sourceType?: string;
   score: number;
 }
 

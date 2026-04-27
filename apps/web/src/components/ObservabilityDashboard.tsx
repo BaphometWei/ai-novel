@@ -1,133 +1,138 @@
-import {
-  summarizeDataQualityIssues,
-  summarizeObservability,
-  summarizeWorkflowBottlenecks
-} from '@ai-novel/evaluation';
+import { useEffect, useMemo, useState } from 'react';
+import { createApiClient, type ObservabilityApiClient, type ProductObservabilitySummary } from '../api/client';
 
-const summary = summarizeObservability([
-  {
-    id: 'run_writer_1',
-    modelProvider: 'openai',
-    modelName: 'gpt-5',
-    costUsd: 1.25,
-    tokens: { input: 1200, output: 800 },
-    durationMs: 2400,
-    retryCount: 1,
-    contextLength: 9000,
-    status: 'Succeeded',
-    qualityOutcome: 'accepted',
-    userAdoption: 'adopted'
-  },
-  {
-    id: 'run_editor_1',
-    modelProvider: 'openai',
-    modelName: 'gpt-5-mini',
-    costUsd: 0.5,
-    tokens: { input: 700, output: 300 },
-    durationMs: 1600,
-    retryCount: 2,
-    contextLength: 5000,
-    status: 'Failed',
-    qualityOutcome: 'needs_revision',
-    userAdoption: 'rejected',
-    errors: [
-      {
-        id: 'error_schema_1',
-        code: 'schema_validation',
-        message: 'Structured output failed validation',
-        severity: 'Error',
-        retryable: true,
-        occurredAt: '2026-04-27T00:00:00.000Z'
+export interface ObservabilityDashboardProps {
+  client?: ObservabilityApiClient;
+}
+
+export function ObservabilityDashboard({ client }: ObservabilityDashboardProps) {
+  const resolvedClient = useMemo(() => client ?? createApiClient(), [client]);
+  const [summary, setSummary] = useState<ProductObservabilitySummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSummary() {
+      setError(null);
+      try {
+        const loaded = await resolvedClient.loadObservabilitySummary();
+        if (!cancelled) setSummary(loaded);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load observability summary');
       }
-    ]
-  }
-]);
-const bottlenecks = summarizeWorkflowBottlenecks([
-  { workflowType: 'draft', stepName: 'retrieve-context', durationMs: 1200, status: 'Succeeded', retryCount: 0 },
-  { workflowType: 'draft', stepName: 'generate-draft', durationMs: 2600, status: 'Failed', retryCount: 2 },
-  { workflowType: 'draft', stepName: 'generate-draft', durationMs: 3400, status: 'Succeeded', retryCount: 1 }
-]);
-const dataQuality = summarizeDataQualityIssues([
-  {
-    id: 'issue_canon_1',
-    projectId: 'project_demo',
-    source: 'canon',
-    severity: 'High',
-    status: 'Open',
-    message: 'Canon fact has no confirmation trail'
-  },
-  {
-    id: 'issue_knowledge_1',
-    projectId: 'project_demo',
-    source: 'knowledge',
-    severity: 'Medium',
-    status: 'Open',
-    message: 'Knowledge item missing source policy'
-  }
-]);
+    }
 
-export function ObservabilityDashboard() {
-  const primaryBottleneck = bottlenecks[0];
-  const primaryError = summary.runErrors[0];
+    void loadSummary();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedClient]);
 
   return (
     <section className="surface-panel" aria-labelledby="observability-title">
       <header className="panel-header">
         <h2 id="observability-title">Observability</h2>
-        <span>Agent runs</span>
+        <span>Product summary</span>
       </header>
-      <dl className="compact-list">
-        <div>
-          <dt>Cost</dt>
-          <dd>${summary.totalCostUsd.toFixed(2)}</dd>
-        </div>
+      {error ? <p role="alert">{error}</p> : null}
+      {!summary && !error ? <p>Loading observability...</p> : null}
+      {summary ? <ObservabilitySummary summary={summary} /> : null}
+    </section>
+  );
+}
+
+function ObservabilitySummary({ summary }: { summary: ProductObservabilitySummary }) {
+  const model = summary.modelUsage[0];
+  const runError = summary.runErrors[0];
+  const bottleneck = summary.workflowBottlenecks[0];
+  const dataQuality = summary.dataQuality ?? summary.quality;
+
+  return (
+    <dl className="compact-list">
+      <div>
+        <dt>Cost</dt>
+        <dd>
+          <span>{formatUsd(summary.cost.totalUsd)}</span>
+          <span>{formatUsd(summary.cost.averageUsdPerRun)}/run</span>
+        </dd>
+      </div>
+      <div>
+        <dt>Tokens</dt>
+        <dd>
+          <span>{formatInteger(summary.tokens.total)} total</span>
+          <span>{formatInteger(summary.tokens.averagePerRun)}/run</span>
+        </dd>
+      </div>
+      <div>
+        <dt>Latency</dt>
+        <dd>
+          <span>{formatInteger(summary.latency.averageDurationMs)} ms avg</span>
+          <span>{formatInteger(summary.latency.p95DurationMs)} ms p95</span>
+        </dd>
+      </div>
+      <div>
+        <dt>Quality</dt>
+        <dd>
+          <span>{formatPercent(summary.quality.acceptedRate)} accepted</span>
+          <span>{formatOutcomes(summary.quality.outcomes)}</span>
+        </dd>
+      </div>
+      <div>
+        <dt>Adoption</dt>
+        <dd>
+          <span>{formatPercent(summary.adoption.adoptedRate)} adopted</span>
+          <span>
+            partial {formatPercent(summary.adoption.partialRate)}, rejected {formatPercent(summary.adoption.rejectedRate)}
+          </span>
+        </dd>
+      </div>
+      {model ? (
         <div>
           <dt>Model usage</dt>
-          <dd>
-            {summary.modelUsage.map((model) => (
-              <span key={model.modelName}>{model.modelName}</span>
-            ))}
-          </dd>
+          <dd>{model.modelName} {formatInteger(model.runCount)} runs</dd>
         </div>
-        <div>
-          <dt>Failure rate</dt>
-          <dd>{Math.round(summary.failureRate * 100)}%</dd>
-        </div>
-        <div>
-          <dt>Retries</dt>
-          <dd>{summary.totalRetryCount}</dd>
-        </div>
-        <div>
-          <dt>Context length</dt>
-          <dd>{summary.averageContextLength.toLocaleString('en-US')} tokens avg</dd>
-        </div>
-        <div>
-          <dt>Quality outcome</dt>
-          <dd>accepted {summary.qualityOutcomes.accepted}</dd>
-        </div>
-        <div>
-          <dt>User adoption</dt>
-          <dd>adopted {summary.userAdoption.adopted}</dd>
-        </div>
+      ) : null}
+      {runError ? (
         <div>
           <dt>Run errors</dt>
-          <dd>{primaryError ? `${primaryError.code} ${primaryError.count}` : 'none'}</dd>
+          <dd>
+            {runError.code} {formatInteger(runError.count)} retryable {formatInteger(runError.retryableCount)}
+          </dd>
         </div>
+      ) : null}
+      {bottleneck ? (
         <div>
           <dt>Workflow bottlenecks</dt>
           <dd>
-            {primaryBottleneck
-              ? `${primaryBottleneck.stepName} ${primaryBottleneck.averageDurationMs.toLocaleString('en-US')} ms avg`
-              : 'none'}
+            {bottleneck.stepName} {formatInteger(bottleneck.averageDurationMs)} ms avg
           </dd>
         </div>
-        <div>
-          <dt>Data quality</dt>
-          <dd>
-            {dataQuality.openIssueCount} open, {dataQuality.highSeverityOpenCount} high
-          </dd>
-        </div>
-      </dl>
-    </section>
+      ) : null}
+      <div>
+        <dt>Data quality</dt>
+        <dd>
+          {formatInteger(dataQuality.openIssueCount)} open, {formatInteger(dataQuality.highSeverityOpenCount)} high
+        </dd>
+      </div>
+    </dl>
   );
+}
+
+function formatUsd(value: number): string {
+  return `$${value.toFixed(2)}`;
+}
+
+function formatInteger(value: number): string {
+  return Math.round(value).toLocaleString('en-US');
+}
+
+function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatOutcomes(outcomes: Record<string, number>): string {
+  const entries = Object.entries(outcomes);
+  return entries.length > 0 ? entries.map(([key, value]) => `${key} ${formatInteger(value)}`).join(', ') : 'none';
 }

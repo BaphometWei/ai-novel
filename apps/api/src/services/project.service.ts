@@ -2,11 +2,13 @@ import { createProject, type Project, type ProjectLanguage } from '@ai-novel/dom
 
 export interface ProjectServiceLike {
   create(input: { title: string; language: ProjectLanguage; targetAudience: string }): Project | Promise<Project>;
+  list(): Project[] | Promise<Project[]>;
   findById(id: string): Project | null | Promise<Project | null>;
 }
 
 export interface ProjectPersistence {
   save(project: Project): Promise<void>;
+  list(): Promise<Project[]>;
   findById(id: string): Promise<Project | null>;
 }
 
@@ -17,6 +19,10 @@ export class ProjectService implements ProjectServiceLike {
     const project = createProject(input);
     this.projects.set(project.id, project);
     return project;
+  }
+
+  list(): Project[] {
+    return [...this.projects.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   }
 
   findById(id: string): Project | null {
@@ -31,6 +37,10 @@ export class PersistentProjectService implements ProjectServiceLike {
     const project = createProject(input);
     await this.repository.save(project);
     return project;
+  }
+
+  async list(): Promise<Project[]> {
+    return this.repository.list();
   }
 
   async findById(id: string): Promise<Project | null> {

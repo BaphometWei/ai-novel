@@ -50,6 +50,7 @@ describe('persistent agent orchestration routes', () => {
         status: 'Succeeded'
       },
       contextPack: {
+        artifactId: expect.stringMatching(/^artifact_/),
         taskGoal: 'Plan the next siege chapter',
         agentRole: 'Planner',
         riskLevel: 'Medium',
@@ -84,10 +85,24 @@ describe('persistent agent orchestration routes', () => {
     expect(reloadResponse.json()).toMatchObject({
       orchestrationRunId: created.orchestrationRunId,
       agentRun: { id: created.agentRun.id, status: 'Succeeded' },
-      contextPack: { id: created.contextPack.id },
+      contextPack: { id: created.contextPack.id, artifactId: created.contextPack.artifactId },
       workflowRun: { id: created.workflowRun.id },
       llmCalls: [{ agentRunId: created.agentRun.id, status: 'Succeeded' }]
     });
+
+    const artifactResponse = await runtime.app.inject({
+      method: 'GET',
+      url: `/artifacts/${created.contextPack.artifactId}`
+    });
+    expect(artifactResponse.statusCode).toBe(200);
+    expect(artifactResponse.json()).toMatchObject({
+      type: 'context_pack',
+      source: 'agent_run',
+      relatedRunId: created.agentRun.id
+    });
+    await expect(runtime.stores.artifactContent.readText(artifactResponse.json().uri)).resolves.toContain(
+      '"taskGoal":"Plan the next siege chapter"'
+    );
 
     await runtime.app.close();
     runtime.database.client.close();

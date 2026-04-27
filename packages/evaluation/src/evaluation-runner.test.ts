@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createEvaluationCase, runEvaluationCases } from './evaluation-runner';
-import { summarizeDataQualityIssues, summarizeObservability, summarizeWorkflowBottlenecks } from './observability';
+import {
+  aggregateProductObservability,
+  summarizeDataQualityIssues,
+  summarizeObservability,
+  summarizeWorkflowBottlenecks
+} from './observability';
 
 describe('evaluation runner', () => {
   it('reports missing must-have facts when a retrieval policy changes', async () => {
@@ -88,6 +93,70 @@ describe('evaluation runner', () => {
       qualityOutcomes: { accepted: 1, needs_revision: 1 },
       userAdoption: { adopted: 1, rejected: 1 },
       runErrors: [{ code: 'schema_validation', count: 1, retryableCount: 1, maxSeverity: 'Error' }]
+    });
+  });
+
+  it('aggregates product observability from runs, quality issues, and adoption events', () => {
+    const summary = aggregateProductObservability({
+      runs: [
+        {
+          id: 'run_writer_1',
+          modelProvider: 'openai',
+          modelName: 'gpt-5',
+          costUsd: 1.2,
+          tokens: { input: 1000, output: 500 },
+          durationMs: 2000,
+          retryCount: 0,
+          contextLength: 8000,
+          status: 'Succeeded',
+          qualityOutcome: 'accepted',
+          userAdoption: 'adopted'
+        },
+        {
+          id: 'run_editor_1',
+          modelProvider: 'openai',
+          modelName: 'gpt-5-mini',
+          costUsd: 0.3,
+          tokens: { input: 400, output: 100 },
+          durationMs: 1000,
+          retryCount: 1,
+          contextLength: 3000,
+          status: 'Succeeded',
+          qualityOutcome: 'needs_revision',
+          userAdoption: 'partial'
+        }
+      ],
+      qualityIssues: [
+        {
+          id: 'issue_1',
+          projectId: 'project_1',
+          source: 'agent_run',
+          severity: 'High',
+          status: 'Open',
+          message: 'Bad continuity handoff'
+        }
+      ],
+      adoptionEvents: [
+        { feature: 'chapter_plan', outcome: 'adopted' },
+        { feature: 'chapter_plan', outcome: 'partial' },
+        { feature: 'review_fix', outcome: 'rejected' }
+      ]
+    });
+
+    expect(summary).toEqual({
+      cost: { totalUsd: 1.5, averageUsdPerRun: 0.75 },
+      latency: { averageDurationMs: 1500, p95DurationMs: 2000 },
+      tokens: { total: 2000, averagePerRun: 1000 },
+      quality: { acceptedRate: 0.5, openIssueCount: 1, highSeverityOpenCount: 1, outcomes: { accepted: 1, needs_revision: 1 } },
+      adoption: {
+        adoptedRate: 1 / 3,
+        partialRate: 1 / 3,
+        rejectedRate: 1 / 3,
+        byFeature: {
+          chapter_plan: { adopted: 1, partial: 1, rejected: 0 },
+          review_fix: { adopted: 0, partial: 0, rejected: 1 }
+        }
+      }
     });
   });
 

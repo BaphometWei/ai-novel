@@ -1,9 +1,12 @@
+import type { ArtifactStore as ArtifactContentStore } from '@ai-novel/artifacts';
 import { createFakeProvider, LlmGateway } from '@ai-novel/llm-gateway';
 import {
   createAgentRun,
+  createArtifactRecord,
   createContextPack,
   createLlmCallRecord,
   type AgentRun,
+  type ArtifactRecord,
   type ContextPack,
   type ContextSection,
   type EntityId,
@@ -29,6 +32,11 @@ export interface ContextPackStore {
   findById(id: string): Promise<ContextPack | null>;
 }
 
+export interface ArtifactMetadataStore {
+  save(artifact: ArtifactRecord): Promise<void>;
+  findByHash(hash: string): Promise<ArtifactRecord | null>;
+}
+
 export interface AgentRunStore {
   save(agentRun: AgentRun): Promise<void>;
   findById(id: EntityId<'agent_run'>): Promise<AgentRun | null>;
@@ -52,6 +60,8 @@ export interface DurableJobStore {
 export interface AgentOrchestrationStores {
   projects: ProjectLookup;
   contextPacks: ContextPackStore;
+  artifacts?: ArtifactMetadataStore;
+  artifactContent?: ArtifactContentStore;
   agentRuns: AgentRunStore;
   llmCallLogs: LlmCallLogStore;
   workflowRuns: WorkflowRunStore;
@@ -152,7 +162,7 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
     await this.stores.durableJobs.save(runningJob);
 
     try {
-      const contextPack = createContextPack({
+      const baseContextPack = createContextPack({
         taskGoal: input.taskGoal,
         agentRole: input.agentRole,
         riskLevel: input.riskLevel,
@@ -162,15 +172,16 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
         warnings: [],
         retrievalTrace: [`orchestration:${input.taskType}`]
       });
-      await this.stores.contextPacks.save(contextPack);
 
       const agentRun = createAgentRun({
         agentName: input.agentRole,
         taskType: input.taskType,
         workflowType: input.workflowType,
         promptVersionId,
-        contextPackId: contextPack.id
+        contextPackId: baseContextPack.id
       });
+      const contextPack = await this.attachContextPackArtifact(baseContextPack, agentRun.id);
+      await this.stores.contextPacks.save(contextPack);
       const contract = createTaskContract({
         projectId: input.projectId,
         taskType: input.taskType,
@@ -193,7 +204,7 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
 
         const llmCalls = await this.persistLlmCalls(gateway, failedAgentRun.id);
         const workflowRun = await this.runner.run(contract, [
-          { name: 'create_context_pack', artifactIds: [contextPack.id], status: 'Succeeded' },
+          { name: 'create_context_pack', artifactIds: [contextPack.artifactId ?? contextPack.id], status: 'Succeeded' },
           { name: 'create_agent_run', artifactIds: [failedAgentRun.id], status: 'Succeeded' },
           {
             name: 'generate_structured_output',
@@ -229,7 +240,7 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
       const llmCalls = await this.persistLlmCalls(gateway, succeededAgentRun.id);
 
       const workflowRun = await this.runner.run(contract, [
-        { name: 'create_context_pack', artifactIds: [contextPack.id], status: 'Succeeded' },
+        { name: 'create_context_pack', artifactIds: [contextPack.artifactId ?? contextPack.id], status: 'Succeeded' },
         { name: 'create_agent_run', artifactIds: [succeededAgentRun.id], status: 'Succeeded' },
         { name: 'generate_structured_output', artifactIds: [], status: 'Succeeded' },
         { name: 'persist_llm_call_log', artifactIds: llmCalls.map((record) => record.id), status: 'Succeeded' }
@@ -313,6 +324,33 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
       await this.stores.llmCallLogs.save(record);
     }
     return llmCalls;
+  }
+
+  private async attachContextPackArtifact(
+    contextPack: ContextPack,
+    relatedRunId: EntityId<'agent_run'>
+  ): Promise<ContextPack> {
+    if (!this.stores.artifacts || !this.stores.artifactContent) return contextPack;
+
+    const content = JSON.stringify({ ...contextPack, relatedRunId });
+    const stored = await this.stores.artifactContent.writeText(`${contextPack.id}.json`, content);
+    const existing = await this.stores.artifacts.findByHash(stored.hash);
+    const artifact =
+      existing ??
+      createArtifactRecord({
+        type: 'context_pack',
+        source: 'agent_run',
+        version: 1,
+        hash: stored.hash,
+        uri: stored.uri,
+        relatedRunId
+      });
+
+    if (!existing) {
+      await this.stores.artifacts.save(artifact);
+    }
+
+    return { ...contextPack, artifactId: artifact.id };
   }
 }
 

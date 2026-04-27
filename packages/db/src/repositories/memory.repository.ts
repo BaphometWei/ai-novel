@@ -55,16 +55,37 @@ export class MemoryRepository {
     const row = await this.db.select().from(approvalRequests).where(eq(approvalRequests.id, id)).get();
     if (!row) return null;
 
-    return {
-      id: row.id as ApprovalRequest['id'],
-      projectId: row.projectId as ApprovalRequest['projectId'],
-      targetType: row.targetType,
-      targetId: row.targetId,
-      riskLevel: row.riskLevel as ApprovalRequest['riskLevel'],
-      reason: row.reason,
-      proposedAction: row.proposedAction,
-      status: row.status as ApprovalRequest['status'],
-      createdAt: row.createdAt
-    };
+    return toApprovalRequest(row);
   }
+
+  async listPendingApprovalRequests(): Promise<ApprovalRequest[]> {
+    const rows = await this.db.select().from(approvalRequests).where(eq(approvalRequests.status, 'Pending')).all();
+    return rows.map(toApprovalRequest);
+  }
+
+  async updateApprovalRequestStatus(id: string, status: ApprovalRequest['status']): Promise<ApprovalRequest | null> {
+    const row = await this.db.select().from(approvalRequests).where(eq(approvalRequests.id, id)).get();
+    if (!row) return null;
+
+    await this.db.update(approvalRequests).set({ status }).where(eq(approvalRequests.id, id));
+
+    const updated = await this.db.select().from(approvalRequests).where(eq(approvalRequests.id, id)).get();
+    return updated ? toApprovalRequest(updated) : null;
+  }
+}
+
+type ApprovalRequestRow = typeof approvalRequests.$inferSelect;
+
+function toApprovalRequest(row: ApprovalRequestRow): ApprovalRequest {
+  return {
+    id: row.id as ApprovalRequest['id'],
+    projectId: row.projectId as ApprovalRequest['projectId'],
+    targetType: row.targetType,
+    targetId: row.targetId,
+    riskLevel: row.riskLevel as ApprovalRequest['riskLevel'],
+    reason: row.reason,
+    proposedAction: row.proposedAction,
+    status: row.status as ApprovalRequest['status'],
+    createdAt: row.createdAt
+  };
 }

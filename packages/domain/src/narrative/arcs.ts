@@ -79,6 +79,7 @@ export interface MotivationState {
   pressure: string;
   beliefChallenge: string;
   source: NarrativeSource;
+  sourceEvidence: NarrativeSource[];
 }
 
 export function createMotivationState(input: {
@@ -87,6 +88,10 @@ export function createMotivationState(input: {
   pressure: string;
   beliefChallenge: string;
   source: NarrativeSource;
+  sourceEvidence?: NarrativeSource[];
 }): MotivationState {
-  return input;
+  return {
+    ...input,
+    sourceEvidence: input.sourceEvidence ?? [input.source]
+  };
 }

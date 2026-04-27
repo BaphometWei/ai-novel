@@ -1,5 +1,5 @@
 export type ReviewSeverity = 'Low' | 'Medium' | 'High' | 'Blocking';
-export type ReviewFindingStatus = 'Open' | 'Applied' | 'Rejected' | 'FalsePositive';
+export type ReviewFindingStatus = 'Open' | 'Accepted' | 'Applied' | 'Rejected' | 'FalsePositive' | 'Resolved' | 'Regression';
 export type RevisionSuggestionStatus = 'Proposed' | 'Applied' | 'Rejected';
 
 export interface ReviewFinding {

@@ -13,9 +13,15 @@ import { importIntoProject } from './import-workflow';
 import {
   exportProjectBundle as exportProjectBundleFromIndex,
   importIntoProject as importIntoProjectFromIndex,
+  createBackup as createBackupFromIndex,
+  extractMemoryFromAcceptedText as extractMemoryFromAcceptedTextFromIndex,
+  listAgentRoomRuns as listAgentRoomRunsFromIndex,
   readProjectBundleBackup as readProjectBundleBackupFromIndex,
   restoreProjectBundle as restoreProjectBundleFromIndex,
+  restoreBackup as restoreBackupFromIndex,
   restoreProjectBundleFromBackup as restoreProjectBundleFromBackupFromIndex,
+  runWritingWorkflow as runWritingWorkflowFromIndex,
+  verifyBackup as verifyBackupFromIndex,
   writeProjectBundleBackup as writeProjectBundleBackupFromIndex
 } from './index';
 
@@ -235,6 +241,15 @@ describe('import/export workflows', () => {
     expect(writeProjectBundleBackupFromIndex).toBe(writeProjectBundleBackup);
     expect(readProjectBundleBackupFromIndex).toBe(readProjectBundleBackup);
     expect(restoreProjectBundleFromBackupFromIndex).toBe(restoreProjectBundleFromBackup);
+  });
+
+  it('exports V2 workflow cores from the workflow package index', () => {
+    expect(runWritingWorkflowFromIndex).toBeTypeOf('function');
+    expect(extractMemoryFromAcceptedTextFromIndex).toBeTypeOf('function');
+    expect(listAgentRoomRunsFromIndex).toBeTypeOf('function');
+    expect(createBackupFromIndex).toBeTypeOf('function');
+    expect(verifyBackupFromIndex).toBeTypeOf('function');
+    expect(restoreBackupFromIndex).toBeTypeOf('function');
   });
 });
 

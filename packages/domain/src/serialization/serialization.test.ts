@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPublishChecklist, createSerializationPlan, summarizeReaderFeedback } from './serialization';
+import { buildPublishChecklist, createSerializationPlan, importReaderFeedbackSignals, summarizeReaderFeedback } from './serialization';
 
 describe('Publish checklist', () => {
   it('blocks publishing on high-risk promise reveal source-policy and calendar issues', () => {
@@ -20,6 +20,20 @@ describe('Publish checklist', () => {
       'source_policy',
       'update_calendar'
     ]);
+  });
+
+  it('keeps non-critical high-risk issues as warnings instead of readiness blockers', () => {
+    const checklist = buildPublishChecklist({
+      chapterId: 'chapter_11',
+      issues: [
+        { category: 'other', severity: 'High', message: 'Marketing copy needs one more pass.' },
+        { category: 'reader_promise', severity: 'Medium', message: 'Promise can wait one more chapter.' }
+      ]
+    });
+
+    expect(checklist.ready).toBe(true);
+    expect(checklist.blockingIssues).toEqual([]);
+    expect(checklist.warnings.map((issue) => issue.category)).toEqual(['other', 'reader_promise']);
   });
 
   it('creates serialization plans with update schedule and platform profile', () => {
@@ -58,6 +72,27 @@ describe('Publish checklist', () => {
     expect(summary.longTermPlanId).toBe('plan_main');
     expect(summary.sentimentCounts.Negative).toBe(2);
     expect(summary.topTags[0]).toEqual({ tag: 'pacing', count: 2 });
+    expect(summary.segmentCounts.core_reader).toBe(2);
     expect(summary.overridesLongTermPlan).toBe(false);
+  });
+
+  it('imports reader feedback as advisory signals without changing the long-term plan', () => {
+    const imported = importReaderFeedbackSignals({
+      longTermPlanId: 'plan_main',
+      feedback: [
+        { id: 'feedback_1', chapterId: 'chapter_3', segment: 'returning_reader', sentiment: 'Negative', tags: ['recap_gap'], text: 'I forgot this faction.' },
+        { id: 'feedback_2', chapterId: 'chapter_3', segment: 'new_reader', sentiment: 'Neutral', tags: ['recap_gap'], text: 'Needed a clearer reminder.' }
+      ]
+    });
+
+    expect(imported.summary.overridesLongTermPlan).toBe(false);
+    expect(imported.advisorySignals).toEqual([
+      {
+        tag: 'recap_gap',
+        count: 2,
+        affectedSegments: ['new_reader', 'returning_reader'],
+        suggestedUse: 'Use as advisory serialization input; do not overwrite the long-term plan.'
+      }
+    ]);
   });
 });

@@ -61,6 +61,44 @@ export interface ObservabilitySummary {
   runErrors: RunErrorSummary[];
 }
 
+export interface ProductAdoptionEvent {
+  feature: string;
+  outcome: UserAdoption;
+}
+
+export interface ProductObservabilityInput {
+  runs: ObservableAgentRun[];
+  qualityIssues?: DataQualityIssue[];
+  adoptionEvents?: ProductAdoptionEvent[];
+}
+
+export interface ProductObservabilitySummary {
+  cost: {
+    totalUsd: number;
+    averageUsdPerRun: number;
+  };
+  latency: {
+    averageDurationMs: number;
+    p95DurationMs: number;
+  };
+  tokens: {
+    total: number;
+    averagePerRun: number;
+  };
+  quality: {
+    acceptedRate: number;
+    openIssueCount: number;
+    highSeverityOpenCount: number;
+    outcomes: Record<string, number>;
+  };
+  adoption: {
+    adoptedRate: number;
+    partialRate: number;
+    rejectedRate: number;
+    byFeature: Record<string, Record<UserAdoption, number>>;
+  };
+}
+
 export interface WorkflowStepTelemetry {
   workflowType: string;
   stepName: string;
@@ -126,6 +164,40 @@ export function summarizeObservability(runs: ObservableAgentRun[]): Observabilit
     qualityOutcomes: countBy(runs.map((run) => run.qualityOutcome)),
     userAdoption: countBy(runs.map((run) => run.userAdoption)),
     runErrors: summarizeRunErrors(runs.flatMap((run) => run.errors ?? []))
+  };
+}
+
+export function aggregateProductObservability(input: ProductObservabilityInput): ProductObservabilitySummary {
+  const observability = summarizeObservability(input.runs);
+  const quality = summarizeDataQualityIssues(input.qualityIssues ?? []);
+  const adoptionEvents = input.adoptionEvents ?? input.runs.map((run) => ({ feature: run.modelName, outcome: run.userAdoption }));
+  const adoptionCounts = countBy(adoptionEvents.map((event) => event.outcome));
+
+  return {
+    cost: {
+      totalUsd: observability.totalCostUsd,
+      averageUsdPerRun: input.runs.length === 0 ? 0 : observability.totalCostUsd / input.runs.length
+    },
+    latency: {
+      averageDurationMs: observability.averageDurationMs,
+      p95DurationMs: percentile(input.runs.map((run) => run.durationMs), 0.95)
+    },
+    tokens: {
+      total: observability.totalTokens,
+      averagePerRun: input.runs.length === 0 ? 0 : observability.totalTokens / input.runs.length
+    },
+    quality: {
+      acceptedRate: input.runs.length === 0 ? 0 : (observability.qualityOutcomes.accepted ?? 0) / input.runs.length,
+      openIssueCount: quality.openIssueCount,
+      highSeverityOpenCount: quality.highSeverityOpenCount,
+      outcomes: observability.qualityOutcomes
+    },
+    adoption: {
+      adoptedRate: rate(adoptionCounts.adopted ?? 0, adoptionEvents.length),
+      partialRate: rate(adoptionCounts.partial ?? 0, adoptionEvents.length),
+      rejectedRate: rate(adoptionCounts.rejected ?? 0, adoptionEvents.length),
+      byFeature: summarizeAdoptionByFeature(adoptionEvents)
+    }
   };
 }
 
@@ -197,6 +269,26 @@ function sum(values: number[]): number {
 
 function average(values: number[]): number {
   return values.length === 0 ? 0 : sum(values) / values.length;
+}
+
+function percentile(values: number[], quantile: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const index = Math.ceil(sorted.length * quantile) - 1;
+  return sorted[Math.max(0, Math.min(sorted.length - 1, index))];
+}
+
+function rate(count: number, total: number): number {
+  return total === 0 ? 0 : count / total;
+}
+
+function summarizeAdoptionByFeature(events: ProductAdoptionEvent[]): Record<string, Record<UserAdoption, number>> {
+  const byFeature: Record<string, Record<UserAdoption, number>> = {};
+  for (const event of events) {
+    byFeature[event.feature] ??= { adopted: 0, partial: 0, rejected: 0 };
+    byFeature[event.feature][event.outcome] += 1;
+  }
+  return byFeature;
 }
 
 function countBy(values: string[]): Record<string, number> {

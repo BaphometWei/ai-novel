@@ -65,6 +65,52 @@ describe('MemoryRepository', () => {
     database.client.close();
   });
 
+  it('lists pending approval requests and updates approval decisions', async () => {
+    const database = createDatabase(':memory:');
+    await migrateDatabase(database.client);
+    const project = createProject({
+      title: 'Long Night',
+      language: 'zh-CN',
+      targetAudience: 'Chinese web-novel readers'
+    });
+    await new ProjectRepository(database.db).save(project);
+    const repository = new MemoryRepository(database.db);
+    const first = createApprovalRequest({
+      projectId: project.id,
+      targetType: 'CanonFact',
+      targetId: 'canon_fact_abc',
+      riskLevel: 'High',
+      reason: 'Changes protagonist backstory',
+      proposedAction: 'Promote draft memory to canon'
+    });
+    const second = createApprovalRequest({
+      projectId: project.id,
+      targetType: 'CanonFact',
+      targetId: 'canon_fact_def',
+      riskLevel: 'Medium',
+      reason: 'Needs confirmation',
+      proposedAction: 'Promote another draft memory to canon'
+    });
+
+    await repository.saveApprovalRequest(first);
+    await repository.saveApprovalRequest(second);
+    await repository.updateApprovalRequestStatus(second.id, 'Approved');
+
+    await expect(repository.listPendingApprovalRequests()).resolves.toMatchObject([
+      { id: first.id, status: 'Pending' }
+    ]);
+    await expect(repository.updateApprovalRequestStatus(first.id, 'Rejected')).resolves.toMatchObject({
+      id: first.id,
+      status: 'Rejected'
+    });
+    await expect(repository.findApprovalRequestById(first.id)).resolves.toMatchObject({
+      id: first.id,
+      status: 'Rejected'
+    });
+    await expect(repository.updateApprovalRequestStatus('approval_request_missing', 'Approved')).resolves.toBeNull();
+    database.client.close();
+  });
+
   it('rejects project-scoped memory rows for missing projects', async () => {
     const database = createDatabase(':memory:');
     await migrateDatabase(database.client);

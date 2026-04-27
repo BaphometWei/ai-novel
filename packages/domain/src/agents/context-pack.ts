@@ -15,6 +15,7 @@ export interface ContextSection {
 
 export interface ContextPack {
   id: EntityId<'context_pack'>;
+  artifactId?: EntityId<'artifact'>;
   taskGoal: string;
   agentRole: string;
   riskLevel: RiskLevel;

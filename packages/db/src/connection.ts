@@ -5,7 +5,7 @@ import * as schema from './schema';
 export type AppDatabase = LibSQLDatabase<typeof schema>;
 
 function toDatabaseUrl(filename: string): string {
-  return filename === ':memory:' ? 'file::memory:' : `file:${filename}`;
+  return filename === ':memory:' ? ':memory:' : `file:${filename}`;
 }
 
 export function createDatabase(filename: string) {

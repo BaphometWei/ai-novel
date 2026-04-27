@@ -1,5 +1,5 @@
 import type { DurableJob } from '@ai-novel/workflow';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { AppDatabase } from '../connection';
 import { durableJobs } from '../schema';
 
@@ -33,14 +33,20 @@ export class DurableJobRepository {
     const row = await this.db.select().from(durableJobs).where(eq(durableJobs.id, id)).get();
     if (!row) return null;
 
-    return {
-      id: row.id,
-      workflowType: row.workflowType,
-      payload: JSON.parse(row.payloadJson) as DurableJob['payload'],
-      status: row.status as DurableJob['status'],
-      retryCount: row.retryCount,
-      replayOfJobId: row.replayOfJobId ?? undefined
-    };
+    return toDurableJob(row);
+  }
+
+  async findByAgentRunId(agentRunId: string): Promise<DurableJob | null> {
+    const row = await this.db
+      .select()
+      .from(durableJobs)
+      .where(sql`json_extract(${durableJobs.payloadJson}, '$.agentRunId') = ${agentRunId}`)
+      .orderBy(sql`rowid DESC`)
+      .limit(1)
+      .get();
+    if (!row) return null;
+
+    return toDurableJob(row);
   }
 
   async findReplayLineage(id: string): Promise<string[]> {
@@ -54,4 +60,15 @@ export class DurableJobRepository {
 
     return lineage;
   }
+}
+
+function toDurableJob(row: typeof durableJobs.$inferSelect): DurableJob {
+  return {
+    id: row.id,
+    workflowType: row.workflowType,
+    payload: JSON.parse(row.payloadJson) as DurableJob['payload'],
+    status: row.status as DurableJob['status'],
+    retryCount: row.retryCount,
+    replayOfJobId: row.replayOfJobId ?? undefined
+  };
 }

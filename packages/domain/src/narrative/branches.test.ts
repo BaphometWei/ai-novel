@@ -31,4 +31,25 @@ describe('Branch scenarios', () => {
     expect(adopted.artifactIds).toEqual(['artifact_existing', 'artifact_branch_scene']);
     expect(adopted.canonFactIds).toEqual(['canon_fact_existing']);
   });
+
+  it('projects branch artifacts through an isolated snapshot that cannot mutate canon or the scenario', () => {
+    const canon = {
+      canonFactIds: ['canon_fact_existing'],
+      artifactIds: ['artifact_existing']
+    };
+    const scenario = createBranchScenario({
+      projectId: 'project_abc',
+      title: 'Hidden heir route',
+      baseCanonFactIds: canon.canonFactIds,
+      artifacts: [{ id: 'artifact_branch_scene', kind: 'outline', content: 'The heir survives.' }]
+    });
+
+    const projection = projectBranchScenario(canon, scenario);
+
+    projection.canon.artifactIds.push('artifact_leaked');
+    projection.projectedArtifacts[0].content = 'Mutated branch artifact.';
+
+    expect(canon.artifactIds).toEqual(['artifact_existing']);
+    expect(scenario.artifacts[0].content).toBe('The heir survives.');
+  });
 });

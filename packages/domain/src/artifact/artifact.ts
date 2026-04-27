@@ -11,6 +11,7 @@ export interface ArtifactRecord {
   version: number;
   hash: string;
   uri: string;
+  relatedRunId?: EntityId<'agent_run'>;
   createdAt: string;
 }
 

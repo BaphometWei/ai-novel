@@ -31,6 +31,78 @@ describe('API app', () => {
     expect(getResponse.json()).toMatchObject({ id: created.id, title: 'Long Night' });
   });
 
+  it('lists projects through the API', async () => {
+    const app = buildApp();
+    await app.inject({
+      method: 'POST',
+      url: '/projects',
+      payload: {
+        title: 'Long Night',
+        language: 'zh-CN',
+        targetAudience: 'Chinese web-novel readers'
+      }
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/projects' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([
+      expect.objectContaining({ title: 'Long Night', status: 'Active' })
+    ]);
+  });
+
+  it('registers settings routes in the app shell', async () => {
+    const app = buildApp();
+    const save = await app.inject({
+      method: 'PUT',
+      url: '/settings/providers/openai',
+      payload: { model: 'gpt-test', apiKey: 'sk-local-secret', maxRunCostUsd: 0.25 }
+    });
+    const read = await app.inject({ method: 'GET', url: '/settings/providers/openai' });
+
+    expect(save.statusCode).toBe(200);
+    expect(read.statusCode).toBe(200);
+    expect(read.json()).toMatchObject({
+      provider: 'openai',
+      defaultModel: 'gpt-test',
+      secretRef: 'env:OPENAI_API_KEY',
+      budget: { maxRunCostUsd: 0.25 }
+    });
+    expect(JSON.stringify(read.json())).not.toContain('sk-local-secret');
+  });
+
+  it('registers workflow surface routes in the app shell', async () => {
+    const app = buildApp();
+
+    const agentRoom = await app.inject({ method: 'GET', url: '/agent-room/runs' });
+    const memory = await app.inject({
+      method: 'POST',
+      url: '/projects/project_app/memory/extractions',
+      payload: {
+        source: {
+          kind: 'AcceptedManuscriptText',
+          manuscriptVersionId: 'manuscript_version_app',
+          text: 'Accepted text.'
+        }
+      }
+    });
+    const backup = await app.inject({
+      method: 'POST',
+      url: '/projects/project_app/backups',
+      payload: { reason: 'manual' }
+    });
+
+    expect(agentRoom.statusCode).toBe(200);
+    expect(agentRoom.json()).toEqual([]);
+    expect(memory.statusCode).toBe(201);
+    expect(memory.json()).toEqual({ candidates: [], approvalRequests: [] });
+    expect(backup.statusCode).toBe(201);
+    expect(backup.json()).toMatchObject({
+      job: { type: 'backup.create', status: 'Succeeded', projectId: 'project_app' },
+      status: { ok: true, stage: 'created' }
+    });
+  });
+
   it('returns 400 for invalid project payloads', async () => {
     const app = buildApp();
     const response = await app.inject({

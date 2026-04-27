@@ -6,9 +6,14 @@ import {
   createContextPack,
   createFixedClock,
   createId,
+  auditAuthorshipTransition,
   createProject,
   createVolume,
-  defineProviderAdapter
+  defineProviderAdapter,
+  detectSecretLeaks,
+  extractArcSignalsFromSceneNotes,
+  planSecretReveal,
+  validateRelationshipTransition
 } from '.';
 
 describe('domain public exports', () => {
@@ -22,5 +27,10 @@ describe('domain public exports', () => {
     expect(createAgentRun).toBeTypeOf('function');
     expect(createContextPack).toBeTypeOf('function');
     expect(defineProviderAdapter).toBeTypeOf('function');
+    expect(auditAuthorshipTransition).toBeTypeOf('function');
+    expect(detectSecretLeaks).toBeTypeOf('function');
+    expect(planSecretReveal).toBeTypeOf('function');
+    expect(validateRelationshipTransition).toBeTypeOf('function');
+    expect(extractArcSignalsFromSceneNotes).toBeTypeOf('function');
   });
 });

@@ -1,5 +1,7 @@
 export type EntityPrefix =
   | 'project'
+  | 'manuscript'
+  | 'manuscript_version'
   | 'volume'
   | 'chapter'
   | 'scene'

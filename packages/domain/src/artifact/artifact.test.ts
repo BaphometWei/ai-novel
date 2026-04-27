@@ -8,7 +8,8 @@ describe('createArtifactRecord', () => {
       source: 'agent_run',
       version: 1,
       hash: 'sha256:abc',
-      uri: 'artifacts/context-pack.json'
+      uri: 'artifacts/context-pack.json',
+      relatedRunId: 'agent_run_context'
     });
 
     expect(artifact).toMatchObject({
@@ -16,7 +17,8 @@ describe('createArtifactRecord', () => {
       source: 'agent_run',
       version: 1,
       hash: 'sha256:abc',
-      uri: 'artifacts/context-pack.json'
+      uri: 'artifacts/context-pack.json',
+      relatedRunId: 'agent_run_context'
     });
   });
 });

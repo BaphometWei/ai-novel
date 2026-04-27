@@ -62,4 +62,20 @@ describe('Character arcs and relationships', () => {
     expect(motivation.beliefChallenge).toBe('Power can be confronted without becoming cruel');
     expect(motivation.source).toEqual(outlineSource);
   });
+
+  it('keeps explicit motivation source evidence without dropping the canonical source', () => {
+    const interviewSource = { type: 'character_note', id: 'note_mai_2' };
+
+    const motivation = createMotivationState({
+      characterId: 'character_hero',
+      currentGoal: 'Protect the border archive',
+      pressure: 'The invading fleet arrives in three days',
+      beliefChallenge: 'Duty to a city can coexist with loyalty to one person',
+      source: outlineSource,
+      sourceEvidence: [outlineSource, interviewSource]
+    });
+
+    expect(motivation.source).toEqual(outlineSource);
+    expect(motivation.sourceEvidence).toEqual([outlineSource, interviewSource]);
+  });
 });

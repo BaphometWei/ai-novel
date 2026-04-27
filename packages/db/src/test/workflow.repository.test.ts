@@ -68,4 +68,24 @@ describe('workflow persistence', () => {
     await expect(durableJobs.findReplayLineage(replay.id)).resolves.toEqual([queued.id, replay.id]);
     database.client.close();
   });
+
+  it('finds the latest durable job for an agent run payload', async () => {
+    const database = createDatabase(':memory:');
+    await migrateDatabase(database.client);
+    const durableJobs = new DurableJobRepository(database.db);
+    const first = createDurableJob({ workflowType: 'chapter_creation', payload: { agentRunId: 'agent_run_abc' } });
+    const latest = {
+      ...createDurableJob({ workflowType: 'chapter_creation', payload: { agentRunId: 'agent_run_abc' } }),
+      status: 'Running' as const
+    };
+
+    await durableJobs.save(first);
+    await durableJobs.save(latest);
+
+    await expect(durableJobs.findByAgentRunId('agent_run_abc')).resolves.toMatchObject({
+      id: latest.id,
+      status: 'Running'
+    });
+    database.client.close();
+  });
 });

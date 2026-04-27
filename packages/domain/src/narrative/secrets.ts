@@ -44,8 +44,8 @@ export function createKnowledgeState(input: {
   };
 }
 
-export function canCharacterUseSecret(_secret: Secret, characterId: string, knowledge: KnowledgeState): boolean {
-  return knowledge.characterKnowledge[characterId]?.state === 'Knows';
+export function canCharacterUseSecret(secret: Secret, characterId: string, knowledge: KnowledgeState): boolean {
+  return knowledge.secretId === secret.id && knowledge.characterKnowledge[characterId]?.state === 'Knows';
 }
 
 export function applyRevealEvent(knowledge: KnowledgeState, event: RevealEvent): KnowledgeState {

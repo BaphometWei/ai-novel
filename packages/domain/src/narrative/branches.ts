@@ -18,13 +18,18 @@ export interface BranchScenario {
 }
 
 export function createBranchScenario(input: Omit<BranchScenario, 'id'>): BranchScenario {
-  return { id: `branch_scenario_${crypto.randomUUID().replace(/-/g, '')}`, ...input };
+  return {
+    id: `branch_scenario_${crypto.randomUUID().replace(/-/g, '')}`,
+    ...input,
+    baseCanonFactIds: [...input.baseCanonFactIds],
+    artifacts: input.artifacts.map((artifact) => ({ ...artifact }))
+  };
 }
 
 export function projectBranchScenario(canon: BranchCanonSnapshot, scenario: BranchScenario) {
   return {
-    canon,
-    projectedArtifacts: scenario.artifacts,
+    canon: cloneCanonSnapshot(canon),
+    projectedArtifacts: scenario.artifacts.map((artifact) => ({ ...artifact })),
     canonChanged: false
   };
 }
@@ -33,5 +38,12 @@ export function adoptBranchScenario(canon: BranchCanonSnapshot, scenario: Branch
   return {
     canonFactIds: [...canon.canonFactIds],
     artifactIds: [...canon.artifactIds, ...scenario.artifacts.map((artifact) => artifact.id)]
+  };
+}
+
+function cloneCanonSnapshot(canon: BranchCanonSnapshot): BranchCanonSnapshot {
+  return {
+    canonFactIds: [...canon.canonFactIds],
+    artifactIds: [...canon.artifactIds]
   };
 }

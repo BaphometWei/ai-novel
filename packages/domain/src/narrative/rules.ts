@@ -4,6 +4,17 @@ export interface AbilityCost {
   unit: string;
 }
 
+export interface ResourceRequirement {
+  kind: string;
+  quantity: number;
+  unit: string;
+}
+
+export interface ProgressionRequirement {
+  track: string;
+  minimumLevel: number;
+}
+
 export interface PowerSystemRule {
   id: string;
   projectId: string;
@@ -11,6 +22,10 @@ export interface PowerSystemRule {
   title: string;
   statement: string;
   requiredCosts: AbilityCost[];
+  cooldownMinutes?: number;
+  requiredResources?: ResourceRequirement[];
+  counterRuleIds?: string[];
+  progressionRequirements?: ProgressionRequirement[];
   limits: unknown[];
 }
 

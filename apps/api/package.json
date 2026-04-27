@@ -9,6 +9,7 @@
     "test": "vitest run --root ../.. apps/api/src"
   },
   "dependencies": {
+    "@ai-novel/artifacts": "file:../../packages/artifacts",
     "@ai-novel/db": "file:../../packages/db",
     "@ai-novel/domain": "file:../../packages/domain",
     "@ai-novel/llm-gateway": "file:../../packages/llm-gateway",

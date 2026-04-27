@@ -40,6 +40,7 @@ describe('ProjectBundleRepository', () => {
       createdAt: '2026-04-27T00:05:00.000Z'
     });
     const loaded = await sourceRepository.findBundleByHash(bundle.hash);
+    const loadedByPath = await sourceRepository.findBackupByPath('backups/project_1.bundle.json');
     await targetRepository.restoreBundle({
       path: 'restores/project_restored.bundle.json',
       bundle: loaded ?? bundle,
@@ -52,6 +53,7 @@ describe('ProjectBundleRepository', () => {
     const restoredItems = await targetRepository.listRestoredItems('restore_project_restored');
 
     expect(loaded?.hash).toBe(bundle.hash);
+    expect(loadedByPath?.hash).toBe(bundle.hash);
     expect(roundTripped?.hash).toBe(bundle.hash);
     expect(roundTripped?.project).toEqual(bundle.project);
     expect(roundTripped?.chapters).toEqual(bundle.chapters);
