@@ -5,6 +5,8 @@ import {
   DurableJobRepository,
   LlmCallLogRepository,
   migrateDatabase,
+  PromptVersionRepository,
+  type PromptVersion,
   ProjectRepository,
   WorkflowRunRepository
 } from '@ai-novel/db';
@@ -18,6 +20,17 @@ import {
 } from '../services/agent-orchestration.service';
 import { PersistentProjectService } from '../services/project.service';
 
+const chapterPlanPromptVersion: PromptVersion = {
+  id: 'prompt_chapter_plan_v1',
+  taskType: 'chapter_planning',
+  template: 'Plan {{goal}} from {{context}}',
+  model: 'fake-model',
+  provider: 'fake',
+  version: 1,
+  status: 'Active',
+  createdAt: '2026-04-27T06:00:00.000Z'
+};
+
 describe('agent orchestration service failure persistence', () => {
   it('persists a failed orchestration run when structured output cannot be repaired', async () => {
     const database = createDatabase(':memory:');
@@ -28,6 +41,7 @@ describe('agent orchestration service failure persistence', () => {
       language: 'zh-CN',
       targetAudience: 'Chinese web-novel readers'
     });
+    await new PromptVersionRepository(database.db).save(chapterPlanPromptVersion);
     const service = createAgentOrchestrationService(
       {
         projects: projectService,

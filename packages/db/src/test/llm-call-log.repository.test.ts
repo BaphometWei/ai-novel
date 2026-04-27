@@ -5,6 +5,18 @@ import { migrateDatabase } from '../migrate';
 import { AgentRunRepository } from '../repositories/agent-run.repository';
 import { ContextPackRepository } from '../repositories/context-pack.repository';
 import { LlmCallLogRepository } from '../repositories/llm-call-log.repository';
+import { PromptVersionRepository, type PromptVersion } from '../repositories/prompt-version.repository';
+
+const promptVersion: PromptVersion = {
+  id: 'prompt_v1',
+  taskType: 'chapter_planning',
+  template: 'Plan from {{context}}',
+  model: 'fake-model',
+  provider: 'fake',
+  version: 1,
+  status: 'Active',
+  createdAt: '2026-04-27T06:00:00.000Z'
+};
 
 describe('LLM call log persistence', () => {
   it('stores traceable call metadata for an agent run', async () => {
@@ -13,6 +25,7 @@ describe('LLM call log persistence', () => {
     const contextPacks = new ContextPackRepository(database.db);
     const agentRuns = new AgentRunRepository(database.db);
     const callLogs = new LlmCallLogRepository(database.db);
+    const promptVersions = new PromptVersionRepository(database.db);
     const contextPack = createContextPack({
       taskGoal: 'Plan chapter',
       agentRole: 'Planner Agent',
@@ -56,6 +69,7 @@ describe('LLM call log persistence', () => {
       error: 'Structured output failed validation for ChapterPlan'
     });
 
+    await promptVersions.save(promptVersion);
     await contextPacks.save(contextPack);
     await agentRuns.save(run);
     await callLogs.save(success);
@@ -68,10 +82,55 @@ describe('LLM call log persistence', () => {
     database.client.close();
   });
 
+  it('rejects call logs that reference a missing prompt version', async () => {
+    const database = createDatabase(':memory:');
+    await migrateDatabase(database.client);
+    const contextPacks = new ContextPackRepository(database.db);
+    const agentRuns = new AgentRunRepository(database.db);
+    const callLogs = new LlmCallLogRepository(database.db);
+    const promptVersions = new PromptVersionRepository(database.db);
+    const contextPack = createContextPack({
+      taskGoal: 'Plan chapter',
+      agentRole: 'Planner Agent',
+      riskLevel: 'Medium',
+      sections: [],
+      citations: [],
+      exclusions: [],
+      warnings: [],
+      retrievalTrace: []
+    });
+    const run = createAgentRun({
+      agentName: 'Planner Agent',
+      taskType: 'chapter_planning',
+      workflowType: 'chapter_creation',
+      promptVersionId: promptVersion.id,
+      contextPackId: contextPack.id
+    });
+    const log = createLlmCallRecord({
+      agentRunId: run.id,
+      promptVersionId: 'prompt_missing',
+      provider: 'fake',
+      model: 'fake-model',
+      usage: { inputTokens: 1, outputTokens: 1 },
+      durationMs: 10,
+      estimatedCostUsd: 0.000002,
+      retryCount: 0,
+      status: 'Succeeded'
+    });
+
+    await promptVersions.save(promptVersion);
+    await contextPacks.save(contextPack);
+    await agentRuns.save(run);
+
+    await expect(callLogs.save(log)).rejects.toThrow();
+    database.client.close();
+  });
+
   it('rejects call logs for a missing agent run', async () => {
     const database = createDatabase(':memory:');
     await migrateDatabase(database.client);
     const callLogs = new LlmCallLogRepository(database.db);
+    const promptVersions = new PromptVersionRepository(database.db);
     const log = createLlmCallRecord({
       agentRunId: 'agent_run_missing',
       promptVersionId: 'prompt_v1',
@@ -84,6 +143,7 @@ describe('LLM call log persistence', () => {
       status: 'Succeeded'
     });
 
+    await promptVersions.save(promptVersion);
     await expect(callLogs.save(log)).rejects.toThrow();
     database.client.close();
   });

@@ -6,6 +6,8 @@ export interface TokenUsage {
   outputTokens: number;
 }
 
+export type StreamTextChunk = string | { text: string; usage?: TokenUsage };
+
 export type LlmCallStatus = 'Succeeded' | 'Failed';
 
 export interface LlmCallRecord {
@@ -32,7 +34,7 @@ export interface ProviderAdapter {
     schemaName: string;
     model?: string;
   }): Promise<{ value: T; usage: TokenUsage }>;
-  streamText(input: { prompt: string; model?: string }): AsyncIterable<string>;
+  streamText(input: { prompt: string; model?: string }): AsyncIterable<StreamTextChunk>;
   embedText(input: { text: string; model?: string }): Promise<{ vector: number[]; model: string }>;
   estimateCost(input: { model?: string; inputTokens: number; outputTokens: number }): { estimatedUsd: number };
 }

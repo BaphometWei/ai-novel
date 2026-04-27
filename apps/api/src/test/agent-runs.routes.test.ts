@@ -3,11 +3,24 @@ import {
   ContextPackRepository,
   createDatabase,
   LlmCallLogRepository,
-  migrateDatabase
+  migrateDatabase,
+  PromptVersionRepository,
+  type PromptVersion
 } from '@ai-novel/db';
 import { createAgentRun, createContextPack } from '@ai-novel/domain';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../app';
+
+const promptVersion: PromptVersion = {
+  id: 'prompt_v1',
+  taskType: 'chapter_planning',
+  template: 'Plan {{goal}} from {{context}}',
+  model: 'fake-model',
+  provider: 'fake',
+  version: 1,
+  status: 'Active',
+  createdAt: '2026-04-27T06:00:00.000Z'
+};
 
 describe('agent run observability API routes', () => {
   it('records and returns LLM call logs for an agent run', async () => {
@@ -16,6 +29,7 @@ describe('agent run observability API routes', () => {
     const contextPacks = new ContextPackRepository(database.db);
     const agentRuns = new AgentRunRepository(database.db);
     const llmCallLogs = new LlmCallLogRepository(database.db);
+    const promptVersions = new PromptVersionRepository(database.db);
     const contextPack = createContextPack({
       taskGoal: 'Plan chapter',
       agentRole: 'Planner Agent',
@@ -33,6 +47,7 @@ describe('agent run observability API routes', () => {
       promptVersionId: 'prompt_v1',
       contextPackId: contextPack.id
     });
+    await promptVersions.save(promptVersion);
     await contextPacks.save(contextPack);
     await agentRuns.save(run);
     const app = buildApp({ agentRuns: { agentRuns, llmCallLogs } });

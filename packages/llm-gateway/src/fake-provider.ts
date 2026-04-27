@@ -30,7 +30,7 @@ export function createFakeProvider(options: FakeProviderOptions): FakeProvider {
       return { value: structured as T, usage };
     },
     async *streamText() {
-      yield options.text;
+      yield { text: options.text, usage };
     },
     async embedText(input) {
       return { vector: options.embedding, model: input.model ?? 'fake-model' };

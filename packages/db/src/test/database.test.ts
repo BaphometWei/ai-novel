@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDatabase } from '../connection';
+import { runDatabaseCheck } from '../check';
 import { migrateDatabase } from '../migrate';
 
 describe('createDatabase', () => {
@@ -13,5 +14,9 @@ describe('createDatabase', () => {
     expect(journalMode.rows[0]).toHaveProperty('journal_mode');
     expect(Number(foreignKeys.rows[0].foreign_keys)).toBe(1);
     database.client.close();
+  });
+
+  it('db check verifies V2 tables and prompt-version foreign key enforcement', async () => {
+    await expect(runDatabaseCheck()).resolves.toBeUndefined();
   });
 });

@@ -38,7 +38,7 @@ export const agentRuns = sqliteTable('agent_runs', {
   agentName: text('agent_name').notNull(),
   taskType: text('task_type').notNull(),
   workflowType: text('workflow_type').notNull(),
-  promptVersionId: text('prompt_version_id').notNull(),
+  promptVersionId: text('prompt_version_id').notNull().references(() => promptVersions.id),
   contextPackId: text('context_pack_id').notNull().references(() => contextPacks.id),
   status: text('status').notNull(),
   createdAt: text('created_at').notNull()
@@ -62,7 +62,7 @@ export const durableJobs = sqliteTable('durable_jobs', {
 export const llmCallLogs = sqliteTable('llm_call_logs', {
   id: text('id').primaryKey(),
   agentRunId: text('agent_run_id').notNull().references(() => agentRuns.id),
-  promptVersionId: text('prompt_version_id').notNull(),
+  promptVersionId: text('prompt_version_id').notNull().references(() => promptVersions.id),
   provider: text('provider').notNull(),
   model: text('model').notNull(),
   schemaName: text('schema_name'),
@@ -74,6 +74,31 @@ export const llmCallLogs = sqliteTable('llm_call_logs', {
   status: text('status').notNull(),
   error: text('error'),
   createdAt: text('created_at').notNull()
+});
+
+export const promptVersions = sqliteTable('prompt_versions', {
+  id: text('id').primaryKey(),
+  taskType: text('task_type').notNull(),
+  template: text('template').notNull(),
+  model: text('model').notNull(),
+  provider: text('provider').notNull(),
+  version: integer('version').notNull(),
+  status: text('status').notNull(),
+  createdAt: text('created_at').notNull()
+});
+
+export const providerSettings = sqliteTable('provider_settings', {
+  provider: text('provider').primaryKey(),
+  defaultModel: text('default_model').notNull(),
+  secretRef: text('secret_ref').notNull(),
+  redactedMetadataJson: text('redacted_metadata_json').notNull(),
+  updatedAt: text('updated_at').notNull()
+});
+
+export const budgetPolicies = sqliteTable('budget_policies', {
+  provider: text('provider').primaryKey(),
+  maxRunCostUsd: integer('max_run_cost_usd').notNull(),
+  updatedAt: text('updated_at').notNull()
 });
 
 export const canonFacts = sqliteTable('canon_facts', {
