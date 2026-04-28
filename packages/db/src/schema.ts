@@ -91,7 +91,12 @@ export const durableJobs = sqliteTable('durable_jobs', {
   payloadJson: text('payload_json').notNull(),
   status: text('status').notNull(),
   retryCount: integer('retry_count').notNull(),
-  replayOfJobId: text('replay_of_job_id')
+  replayOfJobId: text('replay_of_job_id'),
+  availableAt: text('available_at'),
+  leaseOwner: text('lease_owner'),
+  leaseExpiresAt: text('lease_expires_at'),
+  cancelRequestedAt: text('cancel_requested_at'),
+  lastError: text('last_error')
 });
 
 export const scheduledBackupPolicies = sqliteTable('scheduled_backup_policies', {

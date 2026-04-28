@@ -10,6 +10,7 @@ import {
 } from '@ai-novel/workflow';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
+import type { DurableWorkerService } from '../services/durable-worker.service';
 
 export interface WorkflowRunStore {
   save(run: WorkflowRun): Promise<void>;
@@ -25,6 +26,7 @@ export interface DurableJobStore {
 export interface WorkflowRouteStores {
   workflowRuns: WorkflowRunStore;
   durableJobs: DurableJobStore;
+  worker?: DurableWorkerService;
 }
 
 const runStepSchema = z.object({
@@ -58,6 +60,10 @@ const createDurableJobSchema = z.object({
 
 const durableJobStatusSchema = z.object({
   status: z.enum(['Queued', 'Running', 'Paused', 'Retrying', 'Succeeded', 'Failed', 'Cancelled'])
+});
+
+const cancelJobSchema = z.object({
+  reason: z.string().min(1).optional()
 });
 
 class InMemoryWorkflowRunStore implements WorkflowRunStore {
@@ -171,9 +177,26 @@ export function registerWorkflowRoutes(app: FastifyInstance, stores: WorkflowRou
     const job = await stores.durableJobs.findById(params.id);
     if (!job) return reply.code(404).send({ error: 'Durable job not found' });
 
-    const replay = replayJob(job);
+    const replay = stores.worker ? await stores.worker.replay(params.id) : replayJob(job);
+    if (!replay) return reply.code(404).send({ error: 'Durable job not found' });
     await stores.durableJobs.save(replay);
     return reply.code(201).send(replay);
+  });
+
+  app.post('/workflow/jobs/:id/cancel', async (request, reply) => {
+    const params = z.object({ id: z.string().min(1) }).parse(request.params);
+    const parsed = cancelJobSchema.safeParse(request.body ?? {});
+    if (!parsed.success) return invalidPayload(reply);
+    if (!stores.worker) return reply.code(409).send({ error: 'Workflow worker is not configured' });
+
+    const job = await stores.worker.cancel(params.id, parsed.data.reason);
+    if (!job) return reply.code(404).send({ error: 'Durable job not found' });
+    return reply.send(job);
+  });
+
+  app.post('/workflow/worker/run-once', async (_request, reply) => {
+    if (!stores.worker) return reply.code(409).send({ error: 'Workflow worker is not configured' });
+    return reply.send(await stores.worker.runOnce());
   });
 
   app.get('/workflow/jobs/:id/replay-lineage', async (request, reply) => {

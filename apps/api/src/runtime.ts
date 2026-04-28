@@ -53,6 +53,7 @@ import { createDefaultReviewLearningDependencies } from './routes/review-learnin
 import { createAgentOrchestrationService } from './services/agent-orchestration.service';
 import { createAcceptanceWorkflowService } from './services/acceptance-workflow.service';
 import { createContextBuildService } from './services/context-build.service';
+import { createDurableWorkerService } from './services/durable-worker.service';
 import { createGovernanceGateService } from './services/governance-gate.service';
 import { ManuscriptService } from './services/manuscript.service';
 import { createProviderRuntime } from './services/provider-runtime';
@@ -208,6 +209,7 @@ export async function createPersistentApiRuntime(
   configurePersistentGovernanceRouteStore(governance);
   configurePersistentBranchRetconRouteStore(branchRetcon);
   const governanceGate = createGovernanceGateService(governance);
+  const durableWorker = createDurableWorkerService({ durableJobs, handlers: [] });
   const reviewLearningDependencies = {
     ...createDefaultReviewLearningDependencies(),
     store: reviewLearning
@@ -263,7 +265,10 @@ export async function createPersistentApiRuntime(
         workflowRuns,
         durableJobs
       }),
-      workflow: stores.workflow
+      workflow: {
+        ...stores.workflow,
+        worker: durableWorker
+      }
     }),
     database,
     stores

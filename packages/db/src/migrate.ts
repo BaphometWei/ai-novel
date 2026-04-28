@@ -95,7 +95,12 @@ const statements = [
     payload_json TEXT NOT NULL,
     status TEXT NOT NULL,
     retry_count INTEGER NOT NULL,
-    replay_of_job_id TEXT
+    replay_of_job_id TEXT,
+    available_at TEXT,
+    lease_owner TEXT,
+    lease_expires_at TEXT,
+    cancel_requested_at TEXT,
+    last_error TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS scheduled_backup_policies (
     id TEXT PRIMARY KEY,
@@ -451,6 +456,11 @@ export async function migrateDatabase(client: Client): Promise<void> {
   }
 
   await ensureColumn(client, 'artifacts', 'related_run_id', 'TEXT');
+  await ensureColumn(client, 'durable_jobs', 'available_at', 'TEXT');
+  await ensureColumn(client, 'durable_jobs', 'lease_owner', 'TEXT');
+  await ensureColumn(client, 'durable_jobs', 'lease_expires_at', 'TEXT');
+  await ensureColumn(client, 'durable_jobs', 'cancel_requested_at', 'TEXT');
+  await ensureColumn(client, 'durable_jobs', 'last_error', 'TEXT');
   await migrateContextPackArtifactForeignKey(client);
   await migrateChapterCurrentVersionForeignKey(client);
   await migratePromptVersionForeignKeys(client);
