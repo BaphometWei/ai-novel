@@ -19,6 +19,7 @@ export interface BackupWorkflowManifest {
   createdAt: string;
   reason?: string;
   requestedBy?: string;
+  sections?: string[];
   contentHash: string;
 }
 
@@ -100,6 +101,7 @@ export async function createBackup(
     createdAt: now,
     reason: input.reason,
     requestedBy: input.requestedBy,
+    sections: inferBackupSections(payload),
     contentHash: deps.hash(payload)
   };
   const unsignedEnvelope = { manifest, payload };
@@ -307,4 +309,11 @@ function emptyRejectedRecord(path: string, now: string): BackupRecord {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function inferBackupSections(payload: unknown): string[] {
+  if (!payload || typeof payload !== 'object') return [];
+  return Object.entries(payload as Record<string, unknown>)
+    .filter(([, value]) => value !== undefined)
+    .map(([key]) => key);
 }

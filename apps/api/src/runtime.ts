@@ -217,6 +217,10 @@ export async function createPersistentApiRuntime(
   const backup = createPersistentBackupDependencies({
     root: resolveBackupRoot(filename),
     projects: projectRepository,
+    artifacts,
+    manuscripts,
+    agentRuns,
+    settings,
     bundles: projectBundles,
     durableJobs
   });
@@ -278,6 +282,10 @@ export async function createPersistentApiRuntime(
 function createPersistentBackupDependencies(input: {
   root: string;
   projects: ProjectRepository;
+  artifacts: ArtifactRepository;
+  manuscripts: ManuscriptRepository;
+  agentRuns: AgentRunRepository;
+  settings: SettingsRepository;
   bundles: ProjectBundleRepository;
   durableJobs: DurableJobRepository;
 }): BackupWorkflowDependencies {
@@ -296,7 +304,19 @@ function createPersistentBackupDependencies(input: {
       async readProjectSnapshot(projectId) {
         const project = await input.projects.findById(projectId);
         if (!project) throw new Error('Project not found');
-        return { project, exportedAt: new Date().toISOString() };
+        const manuscript = await input.manuscripts.findByProjectId(projectId);
+        const chapters = manuscript ? await input.manuscripts.listChapters(manuscript.id) : [];
+        return {
+          project,
+          manuscripts: manuscript ? [{ ...manuscript, chapters }] : [],
+          artifacts: await input.artifacts.list({ limit: 1000 }),
+          runs: await input.agentRuns.list({ limit: 1000 }),
+          settings: {
+            provider: await input.settings.findProviderSettings('openai'),
+            budget: await input.settings.findBudgetPolicy('openai')
+          },
+          exportedAt: new Date().toISOString()
+        };
       },
       backupPathFor(backupId) {
         return join('backups', `${backupId}.json`);

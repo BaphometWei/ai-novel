@@ -43,6 +43,7 @@ describe('backup workflow core', () => {
         createdAt: '2026-04-27T10:00:00.000Z',
         reason: 'manual',
         requestedBy: 'operator',
+        sections: ['project'],
         contentHash: result.record.manifest.contentHash
       },
       createdAt: '2026-04-27T10:00:00.000Z',

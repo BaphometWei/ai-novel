@@ -104,6 +104,9 @@ describe('backup API routes', () => {
       expect(backupResponse.statusCode).toBe(201);
       const backup = backupResponse.json();
       expect(backup.record.path).not.toMatch(/^memory:\/\//);
+      expect(backup.record.manifest.sections).toEqual(
+        expect.arrayContaining(['project', 'manuscripts', 'artifacts', 'runs', 'settings'])
+      );
 
       const verifyResponse = await runtime.app.inject({
         method: 'POST',
