@@ -68,7 +68,7 @@ function createConfiguredGatewayOptions(
 
 function createDefaultFakeProvider(): ProviderAdapter {
   return createFakeProvider({
-    text: 'Deterministic agent output',
+    text: 'Deterministic writing draft',
     structured: {
       title: 'Deterministic chapter plan',
       nextAction: 'Review the plan with the author'
