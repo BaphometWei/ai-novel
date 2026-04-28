@@ -540,7 +540,7 @@ export interface ApprovalItem {
 }
 
 export interface ApprovalsApiClient {
-  listPendingApprovals(): Promise<ApprovalItem[]>;
+  listPendingApprovals(input?: { projectId?: string }): Promise<ApprovalItem[]>;
   approve(id: string, input?: { decidedBy?: string; note?: string }): Promise<ApprovalItem>;
   reject(id: string, input?: { decidedBy?: string; note?: string }): Promise<ApprovalItem>;
 }
@@ -984,10 +984,11 @@ export function createApiClient(
       }
       return [] as GlobalSearchResult[];
     },
-    listPendingApprovals: async () => {
+    listPendingApprovals: async (input?: { projectId?: string }) => {
       const result = await requestJson(fetchImpl, `${baseUrl}/approvals`);
       const items = isRecord(result) && Array.isArray(result.items) ? result.items : [];
-      return (items as unknown[]).flatMap((it) => (isRecord(it) ? [adaptApprovalItem(it)] : []));
+      const approvals = (items as unknown[]).flatMap((it) => (isRecord(it) ? [adaptApprovalItem(it)] : []));
+      return input?.projectId ? approvals.filter((item) => item.projectId === input.projectId) : approvals;
     },
     approve: async (id: string, input?: { decidedBy?: string; note?: string }) => {
       const result = await requestJson(fetchImpl, `${baseUrl}/approvals/${id}/approve`, jsonRequest('POST', input ?? {}));
