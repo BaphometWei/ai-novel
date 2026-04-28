@@ -285,6 +285,19 @@ export const revisionSuggestions = sqliteTable('revision_suggestions', {
   status: text('status').notNull()
 });
 
+export const reviewFindingActions = sqliteTable('review_finding_actions', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull().references(() => projects.id),
+  findingId: text('finding_id').notNull(),
+  action: text('action').notNull(),
+  previousStatus: text('previous_status').notNull(),
+  nextStatus: text('next_status').notNull(),
+  decidedBy: text('decided_by'),
+  reason: text('reason'),
+  createdTaskId: text('created_task_id'),
+  occurredAt: text('occurred_at').notNull()
+});
+
 export const reviewLearningEvents = sqliteTable(
   'review_learning_events',
   {

@@ -10,6 +10,7 @@ import {
   type KnowledgeItem,
   type Project,
   type ReaderFeedback,
+  type ReviewFindingStatus,
   type ReviewReport,
   type RevisionSuggestion
 } from '@ai-novel/domain';
@@ -24,6 +25,22 @@ export interface WorkbenchReviewStore {
   saveReport(report: ReviewReport): Promise<void>;
   findReportById(id: string): Promise<ReviewReport | null>;
   findReportContainingFinding(projectId: string, findingId: string): Promise<ReviewReport | null>;
+  recordFindingAction?(input: {
+    projectId: string;
+    findingId: string;
+    action: 'Accepted' | 'Rejected' | 'FalsePositive' | 'ApplyRevision' | 'ConvertToTask';
+    decidedBy?: string;
+    reason?: string;
+  }): Promise<{
+    findingId: string;
+    action: string;
+    previousStatus: ReviewFindingStatus;
+    nextStatus: ReviewFindingStatus;
+    decidedBy?: string;
+    reason?: string;
+    createdTaskId?: string;
+    occurredAt: string;
+  } | null>;
   saveRevisionSuggestion(suggestion: RevisionSuggestion): Promise<void>;
   findRevisionSuggestionById(id: string): Promise<RevisionSuggestion | null>;
 }
@@ -90,6 +107,17 @@ const createRevisionSuggestionSchema = z.object({
     after: z.string()
   }),
   risk: riskSchema
+});
+
+const findingActionSchema = z.object({
+  projectId: z.string().min(1),
+  action: z.enum(['Accepted', 'Rejected', 'FalsePositive', 'ApplyRevision', 'ConvertToTask']),
+  decidedBy: z.string().min(1).optional(),
+  reason: z.string().min(1).optional()
+});
+
+const findingActionParamsSchema = z.object({
+  findingId: z.string().min(1)
 });
 
 const readerFeedbackSchema = z.object({
@@ -193,6 +221,41 @@ class InMemoryReviewStore implements WorkbenchReviewStore {
     );
   }
 
+  async recordFindingAction(input: {
+    projectId: string;
+    findingId: string;
+    action: 'Accepted' | 'Rejected' | 'FalsePositive' | 'ApplyRevision' | 'ConvertToTask';
+    decidedBy?: string;
+    reason?: string;
+  }) {
+    const report = await this.findReportContainingFinding(input.projectId, input.findingId);
+    if (!report) return null;
+
+    const finding = report.findings.find((candidate) => candidate.id === input.findingId);
+    if (!finding) return null;
+    const previousStatus = finding.status;
+    const nextStatus = nextFindingStatus(input.action);
+    const updatedReport = {
+      ...report,
+      findings: report.findings.map((candidate) =>
+        candidate.id === input.findingId ? { ...candidate, status: nextStatus } : candidate
+      )
+    };
+    updatedReport.openFindingCount = updatedReport.findings.filter((candidate) => candidate.status === 'Open').length;
+    this.reports.set(report.id, updatedReport);
+
+    return {
+      findingId: input.findingId,
+      action: input.action,
+      previousStatus,
+      nextStatus,
+      decidedBy: input.decidedBy,
+      reason: input.reason,
+      createdTaskId: input.action === 'ConvertToTask' ? `task_${crypto.randomUUID().replace(/-/g, '')}` : undefined,
+      occurredAt: new Date().toISOString()
+    };
+  }
+
   async saveRevisionSuggestion(suggestion: RevisionSuggestion): Promise<void> {
     const findingExists = [...this.reports.values()].some((report) =>
       report.findings.some((finding) => finding.id === suggestion.findingId)
@@ -289,6 +352,26 @@ export function registerWorkbenchRoutes(app: FastifyInstance, stores: WorkbenchR
     if (!parsed.success) return invalidPayload(reply);
 
     return reply.code(201).send(createRevisionSuggestion(parsed.data));
+  });
+
+  app.post('/review/findings/:findingId/actions', async (request, reply) => {
+    const params = findingActionParamsSchema.safeParse(request.params);
+    const parsed = findingActionSchema.safeParse(request.body);
+    if (!params.success || !parsed.success) return invalidPayload(reply);
+
+    if (!stores.review.recordFindingAction) {
+      return reply.code(409).send({ error: 'Review finding actions are not configured' });
+    }
+
+    const action = await stores.review.recordFindingAction({
+      projectId: parsed.data.projectId,
+      findingId: params.data.findingId,
+      action: parsed.data.action,
+      decidedBy: parsed.data.decidedBy,
+      reason: parsed.data.reason
+    });
+    if (!action) return reply.code(404).send({ error: 'Review finding not found' });
+    return reply.send(action);
   });
 
   app.post('/projects/:projectId/review/reports', async (request, reply) => {
@@ -406,4 +489,21 @@ export function registerWorkbenchRoutes(app: FastifyInstance, stores: WorkbenchR
 
     return reply.send(await stores.knowledge.buildGenerationSourceContext(params.data.projectId));
   });
+}
+
+function nextFindingStatus(
+  action: 'Accepted' | 'Rejected' | 'FalsePositive' | 'ApplyRevision' | 'ConvertToTask'
+): ReviewFindingStatus {
+  switch (action) {
+    case 'Accepted':
+      return 'Accepted';
+    case 'Rejected':
+      return 'Rejected';
+    case 'FalsePositive':
+      return 'FalsePositive';
+    case 'ApplyRevision':
+      return 'Applied';
+    case 'ConvertToTask':
+      return 'Open';
+  }
 }

@@ -272,6 +272,19 @@ const statements = [
     risk TEXT NOT NULL,
     status TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS review_finding_actions (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    finding_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    previous_status TEXT NOT NULL,
+    next_status TEXT NOT NULL,
+    decided_by TEXT,
+    reason TEXT,
+    created_task_id TEXT,
+    occurred_at TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+  )`,
   `CREATE TABLE IF NOT EXISTS review_learning_events (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,

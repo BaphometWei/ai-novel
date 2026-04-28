@@ -1,7 +1,22 @@
-import type { ReviewReport, RevisionSuggestion } from '@ai-novel/domain';
+import type { ReviewFindingStatus, ReviewReport, RevisionSuggestion } from '@ai-novel/domain';
 import { eq } from 'drizzle-orm';
 import type { AppDatabase } from '../connection';
-import { reviewReports, revisionSuggestions } from '../schema';
+import { reviewFindingActions, reviewReports, revisionSuggestions } from '../schema';
+
+export type ReviewFindingActionKind = 'Accepted' | 'Rejected' | 'FalsePositive' | 'ApplyRevision' | 'ConvertToTask';
+
+export interface ReviewFindingActionRecord {
+  id: string;
+  projectId: string;
+  findingId: string;
+  action: ReviewFindingActionKind;
+  previousStatus: ReviewFindingStatus;
+  nextStatus: ReviewFindingStatus;
+  decidedBy?: string;
+  reason?: string;
+  createdTaskId?: string;
+  occurredAt: string;
+}
 
 export class ReviewRepository {
   constructor(private readonly db: AppDatabase) {}
@@ -31,6 +46,67 @@ export class ReviewRepository {
       (JSON.parse(reportRow.findingsJson) as ReviewReport['findings']).some((finding) => finding.id === findingId)
     );
     return row ? toReviewReport(row) : null;
+  }
+
+  async recordFindingAction(input: {
+    projectId: string;
+    findingId: string;
+    action: ReviewFindingActionKind;
+    decidedBy?: string;
+    reason?: string;
+  }): Promise<ReviewFindingActionRecord | null> {
+    const rows = await this.db.select().from(reviewReports).where(eq(reviewReports.projectId, input.projectId)).all();
+    const row = rows.find((reportRow) =>
+      (JSON.parse(reportRow.findingsJson) as ReviewReport['findings']).some((finding) => finding.id === input.findingId)
+    );
+    if (!row) return null;
+
+    const report = toReviewReport(row);
+    const finding = report.findings.find((candidate) => candidate.id === input.findingId);
+    if (!finding) return null;
+
+    const previousStatus = finding.status;
+    const nextStatus = nextFindingStatus(input.action);
+    const updatedFindings = report.findings.map((candidate) =>
+      candidate.id === input.findingId ? { ...candidate, status: nextStatus } : candidate
+    );
+    const openFindingCount = updatedFindings.filter((candidate) => candidate.status === 'Open').length;
+
+    await this.db
+      .update(reviewReports)
+      .set({
+        findingsJson: JSON.stringify(updatedFindings),
+        openFindingCount
+      })
+      .where(eq(reviewReports.id, report.id));
+
+    const action: ReviewFindingActionRecord = {
+      id: `review_action_${crypto.randomUUID().replace(/-/g, '')}`,
+      projectId: input.projectId,
+      findingId: input.findingId,
+      action: input.action,
+      previousStatus,
+      nextStatus,
+      decidedBy: input.decidedBy,
+      reason: input.reason,
+      createdTaskId: input.action === 'ConvertToTask' ? `task_${crypto.randomUUID().replace(/-/g, '')}` : undefined,
+      occurredAt: new Date().toISOString()
+    };
+
+    await this.db.insert(reviewFindingActions).values({
+      id: action.id,
+      projectId: action.projectId,
+      findingId: action.findingId,
+      action: action.action,
+      previousStatus: action.previousStatus,
+      nextStatus: action.nextStatus,
+      decidedBy: action.decidedBy,
+      reason: action.reason,
+      createdTaskId: action.createdTaskId,
+      occurredAt: action.occurredAt
+    });
+
+    return action;
   }
 
   private async findingExists(findingId: string): Promise<boolean> {
@@ -87,4 +163,19 @@ function toReviewReport(row: ReviewReportRow): ReviewReport {
     qualityScore: JSON.parse(row.qualityScoreJson) as ReviewReport['qualityScore'],
     openFindingCount: row.openFindingCount
   };
+}
+
+function nextFindingStatus(action: ReviewFindingActionKind): ReviewFindingStatus {
+  switch (action) {
+    case 'Accepted':
+      return 'Accepted';
+    case 'Rejected':
+      return 'Rejected';
+    case 'FalsePositive':
+      return 'FalsePositive';
+    case 'ApplyRevision':
+      return 'Applied';
+    case 'ConvertToTask':
+      return 'Open';
+  }
 }
