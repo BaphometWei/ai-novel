@@ -51,7 +51,9 @@ import type { ScheduledBackupRouteStore } from './routes/scheduled-backup.routes
 import { createRepositorySearchStore } from './routes/search.routes';
 import { createDefaultReviewLearningDependencies } from './routes/review-learning.routes';
 import { createAgentOrchestrationService } from './services/agent-orchestration.service';
+import { createAcceptanceWorkflowService } from './services/acceptance-workflow.service';
 import { createContextBuildService } from './services/context-build.service';
+import { createGovernanceGateService } from './services/governance-gate.service';
 import { ManuscriptService } from './services/manuscript.service';
 import { createProviderRuntime } from './services/provider-runtime';
 import { PersistentProjectService } from './services/project.service';
@@ -205,6 +207,7 @@ export async function createPersistentApiRuntime(
   });
   configurePersistentGovernanceRouteStore(governance);
   configurePersistentBranchRetconRouteStore(branchRetcon);
+  const governanceGate = createGovernanceGateService(governance);
   const reviewLearningDependencies = {
     ...createDefaultReviewLearningDependencies(),
     store: reviewLearning
@@ -218,6 +221,11 @@ export async function createPersistentApiRuntime(
 
   return {
     app: buildApp({
+      acceptanceWorkflow: createAcceptanceWorkflowService({
+        manuscriptService,
+        memoryRepository: memory,
+        governanceGate
+      }),
       agentRoom,
       agentRuns: stores.agentRuns,
       approvals: createRepositoryApprovalStore(memory),

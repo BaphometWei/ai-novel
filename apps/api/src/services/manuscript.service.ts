@@ -87,6 +87,10 @@ export class ManuscriptService {
     }
   }
 
+  async findChapterById(chapterId: EntityId<'chapter'>): Promise<ChapterRecord | null> {
+    return this.manuscripts.findChapterById(chapterId);
+  }
+
   async createProjectChapter(projectId: EntityId<'project'>, input: CreateProjectChapterInput) {
     const project = await this.projects.findById(projectId);
     if (!project) return null;

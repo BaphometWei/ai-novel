@@ -172,6 +172,23 @@ const statements = [
     created_at TEXT NOT NULL,
     FOREIGN KEY (project_id) REFERENCES projects(id)
   )`,
+  `CREATE TABLE IF NOT EXISTS memory_candidate_facts (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    manuscript_version_id TEXT NOT NULL,
+    source_kind TEXT NOT NULL,
+    text TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    confidence INTEGER NOT NULL,
+    risk_level TEXT NOT NULL,
+    evidence TEXT NOT NULL,
+    status TEXT NOT NULL,
+    approval_request_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id),
+    FOREIGN KEY (approval_request_id) REFERENCES approval_requests(id)
+  )`,
   `CREATE TABLE IF NOT EXISTS dependency_index_entries (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,

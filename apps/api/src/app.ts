@@ -30,6 +30,7 @@ import { createInMemoryWorkbenchStores, registerWorkbenchRoutes, type WorkbenchR
 import { registerWritingRunRoutes, type WritingRunRouteDependencies } from './routes/writing-runs.routes';
 import { registerWorkflowRoutes, type WorkflowRouteStores } from './routes/workflow.routes';
 import type { AgentOrchestrationService } from './services/agent-orchestration.service';
+import type { AcceptanceWorkflowService } from './services/acceptance-workflow.service';
 import type { ManuscriptService } from './services/manuscript.service';
 import { ProjectService, type ProjectServiceLike } from './services/project.service';
 import type { SettingsService } from './services/settings.service';
@@ -37,6 +38,7 @@ import type { SettingsService } from './services/settings.service';
 export interface BuildAppOptions {
   agentRoom?: AgentRoomRepositories;
   agentRuns?: AgentRunRouteStores;
+  acceptanceWorkflow?: AcceptanceWorkflowService;
   approvals?: ApprovalRouteStore;
   artifacts?: ArtifactRouteStore;
   artifactContent?: ArtifactStore;
@@ -96,7 +98,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     });
   }
   if (options.manuscriptService) {
-    registerManuscriptRoutes(app, options.manuscriptService);
+    registerManuscriptRoutes(app, options.manuscriptService, options.acceptanceWorkflow);
   }
   if (options.orchestration) {
     registerOrchestrationRoutes(app, options.orchestration);

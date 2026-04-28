@@ -160,6 +160,22 @@ export const canonFacts = sqliteTable('canon_facts', {
   updatedAt: text('updated_at').notNull()
 });
 
+export const memoryCandidateFacts = sqliteTable('memory_candidate_facts', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull().references(() => projects.id),
+  manuscriptVersionId: text('manuscript_version_id').notNull(),
+  sourceKind: text('source_kind').notNull(),
+  text: text('text').notNull(),
+  kind: text('kind').notNull(),
+  confidence: integer('confidence').notNull(),
+  riskLevel: text('risk_level').notNull(),
+  evidence: text('evidence').notNull(),
+  status: text('status').notNull(),
+  approvalRequestId: text('approval_request_id').references(() => approvalRequests.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull()
+});
+
 export const approvalRequests = sqliteTable('approval_requests', {
   id: text('id').primaryKey(),
   projectId: text('project_id').notNull().references(() => projects.id),

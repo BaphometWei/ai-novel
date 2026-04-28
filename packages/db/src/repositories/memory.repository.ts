@@ -1,7 +1,8 @@
 import type { ApprovalRequest, CanonFact } from '@ai-novel/domain';
+import type { MemoryApprovalRequest, MemoryCandidateFact } from '@ai-novel/workflow';
 import { eq } from 'drizzle-orm';
 import type { AppDatabase } from '../connection';
-import { approvalRequests, canonFacts } from '../schema';
+import { approvalRequests, canonFacts, memoryCandidateFacts } from '../schema';
 
 export class MemoryRepository {
   constructor(private readonly db: AppDatabase) {}
@@ -37,17 +38,64 @@ export class MemoryRepository {
     };
   }
 
-  async saveApprovalRequest(request: ApprovalRequest): Promise<void> {
+  async saveCandidate(candidate: MemoryCandidateFact): Promise<void> {
+    await this.db
+      .insert(memoryCandidateFacts)
+      .values({
+        id: candidate.id,
+        projectId: candidate.projectId,
+        manuscriptVersionId: candidate.manuscriptVersionId,
+        sourceKind: candidate.sourceKind,
+        text: candidate.text,
+        kind: candidate.kind,
+        confidence: Math.round(candidate.confidence * 1_000_000),
+        riskLevel: candidate.riskLevel,
+        evidence: candidate.evidence,
+        status: candidate.status,
+        approvalRequestId: null,
+        createdAt: candidate.createdAt,
+        updatedAt: candidate.createdAt
+      })
+      .onConflictDoUpdate({
+        target: memoryCandidateFacts.id,
+        set: {
+          text: candidate.text,
+          kind: candidate.kind,
+          confidence: Math.round(candidate.confidence * 1_000_000),
+          riskLevel: candidate.riskLevel,
+          evidence: candidate.evidence,
+          status: candidate.status,
+          updatedAt: candidate.createdAt
+        }
+      });
+  }
+
+  async findCandidateById(id: string): Promise<(MemoryCandidateFact & { approvalRequestId?: string }) | null> {
+    const row = await this.db.select().from(memoryCandidateFacts).where(eq(memoryCandidateFacts.id, id)).get();
+    if (!row) return null;
+
+    return toMemoryCandidate(row);
+  }
+
+  async linkCandidateApproval(candidateId: string, approvalRequestId: string): Promise<void> {
+    await this.db
+      .update(memoryCandidateFacts)
+      .set({ approvalRequestId, updatedAt: new Date().toISOString() })
+      .where(eq(memoryCandidateFacts.id, candidateId));
+  }
+
+  async saveApprovalRequest(request: ApprovalRequest | MemoryApprovalRequest): Promise<void> {
+    const normalized = normalizeApprovalRequest(request);
     await this.db.insert(approvalRequests).values({
-      id: request.id,
-      projectId: request.projectId,
-      targetType: request.targetType,
-      targetId: request.targetId,
-      riskLevel: request.riskLevel,
-      reason: request.reason,
-      proposedAction: request.proposedAction,
-      status: request.status,
-      createdAt: request.createdAt
+      id: normalized.id,
+      projectId: normalized.projectId,
+      targetType: normalized.targetType,
+      targetId: normalized.targetId,
+      riskLevel: normalized.riskLevel,
+      reason: normalized.reason,
+      proposedAction: normalized.proposedAction,
+      status: normalized.status,
+      createdAt: normalized.createdAt
     });
   }
 
@@ -75,6 +123,7 @@ export class MemoryRepository {
 }
 
 type ApprovalRequestRow = typeof approvalRequests.$inferSelect;
+type MemoryCandidateRow = typeof memoryCandidateFacts.$inferSelect;
 
 function toApprovalRequest(row: ApprovalRequestRow): ApprovalRequest {
   return {
@@ -87,5 +136,38 @@ function toApprovalRequest(row: ApprovalRequestRow): ApprovalRequest {
     proposedAction: row.proposedAction,
     status: row.status as ApprovalRequest['status'],
     createdAt: row.createdAt
+  };
+}
+
+function normalizeApprovalRequest(request: ApprovalRequest | MemoryApprovalRequest): ApprovalRequest {
+  if ('targetType' in request) return request;
+
+  return {
+    id: request.id as ApprovalRequest['id'],
+    projectId: request.projectId as ApprovalRequest['projectId'],
+    targetType: 'memory_candidate_fact',
+    targetId: request.candidateId,
+    riskLevel: request.riskLevel === 'Low' ? 'Medium' : request.riskLevel,
+    reason: `Memory candidate from manuscript version ${request.manuscriptVersionId} requires approval`,
+    proposedAction: request.requestedAction,
+    status: request.status,
+    createdAt: request.createdAt
+  };
+}
+
+function toMemoryCandidate(row: MemoryCandidateRow): MemoryCandidateFact & { approvalRequestId?: string } {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    manuscriptVersionId: row.manuscriptVersionId,
+    sourceKind: row.sourceKind as MemoryCandidateFact['sourceKind'],
+    text: row.text,
+    kind: row.kind as MemoryCandidateFact['kind'],
+    confidence: row.confidence / 1_000_000,
+    riskLevel: row.riskLevel as MemoryCandidateFact['riskLevel'],
+    evidence: row.evidence,
+    status: row.status as MemoryCandidateFact['status'],
+    createdAt: row.createdAt,
+    ...(row.approvalRequestId ? { approvalRequestId: row.approvalRequestId } : {})
   };
 }
