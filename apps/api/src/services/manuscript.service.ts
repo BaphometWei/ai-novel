@@ -91,6 +91,34 @@ export class ManuscriptService {
     return this.manuscripts.findChapterById(chapterId);
   }
 
+  async getProjectVersionBody(
+    projectId: EntityId<'project'>,
+    versionId: EntityId<'manuscript_version'>
+  ): Promise<{ chapterId: string; versionId: string; body: string; status: string } | null> {
+    if (!this.artifacts || !this.artifactContent) return null;
+
+    const manuscript = await this.manuscripts.findByProjectId(projectId);
+    if (!manuscript) return null;
+
+    const chapters = await this.manuscripts.listChapters(manuscript.id);
+    for (const chapter of chapters) {
+      const version = chapter.versions.find((candidate) => candidate.id === versionId);
+      if (!version) continue;
+
+      const artifact = await this.artifacts.findById(version.bodyArtifactId);
+      if (!artifact) return null;
+
+      return {
+        chapterId: chapter.id,
+        versionId: version.id,
+        body: await this.artifactContent.readText(artifact.uri),
+        status: version.status
+      };
+    }
+
+    return null;
+  }
+
   async createProjectChapter(projectId: EntityId<'project'>, input: CreateProjectChapterInput) {
     const project = await this.projects.findById(projectId);
     if (!project) return null;

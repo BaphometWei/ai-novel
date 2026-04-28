@@ -1,6 +1,7 @@
 import {
   assessReaderPromiseHealth,
   createClosureChecklist,
+  extractPromiseCandidatesFromStructuredText,
   getReaderPromiseUiState,
   recommendReaderPromisePayoff,
   type ReaderPromise
@@ -12,8 +13,29 @@ export interface NarrativeStateReader {
   listByProjectAndType(projectId: string, type: 'promise' | 'arc'): Promise<Array<{ payload: unknown }>>;
 }
 
+export interface NarrativeStateWriter {
+  upsert(record: {
+    id: string;
+    projectId: string;
+    type: string;
+    payload: unknown;
+    snapshotVersion: number;
+    snapshotMetadata: Array<{ version: number; source: string; sourceId?: string; note?: string; createdAt: string }>;
+    createdAt: string;
+    updatedAt: string;
+  }): Promise<void>;
+}
+
+export interface NarrativeManuscriptVersionReader {
+  getProjectVersionBody(
+    projectId: string,
+    versionId: string
+  ): Promise<{ chapterId: string; versionId: string; body: string; status: string } | null>;
+}
+
 export interface NarrativeIntelligenceRouteDependencies {
-  narrativeStates?: NarrativeStateReader;
+  narrativeStates?: NarrativeStateReader & Partial<NarrativeStateWriter>;
+  manuscriptVersions?: NarrativeManuscriptVersionReader;
 }
 
 const narrativeEntityRefSchema = z.object({
@@ -108,6 +130,15 @@ const summaryQuerySchema = z.object({
   currentChapter: z.coerce.number().int().positive().default(1)
 });
 
+const extractionParamsSchema = z.object({
+  projectId: z.string().min(1)
+});
+
+const extractionSchema = z.object({
+  manuscriptVersionId: z.string().min(1),
+  sourceRunId: z.string().min(1).optional()
+});
+
 function invalidPayload(reply: FastifyReply) {
   return reply.code(400).send({ error: 'Invalid narrative intelligence payload' });
 }
@@ -116,6 +147,40 @@ export function registerNarrativeIntelligenceRoutes(
   app: FastifyInstance,
   dependencies: NarrativeIntelligenceRouteDependencies = {}
 ) {
+  app.post('/projects/:projectId/narrative-intelligence/extract-from-version', async (request, reply) => {
+    const params = extractionParamsSchema.safeParse(request.params);
+    const parsed = extractionSchema.safeParse(request.body);
+    if (!params.success || !parsed.success) return invalidPayload(reply);
+    if (!dependencies.manuscriptVersions || !dependencies.narrativeStates?.upsert) {
+      return reply.code(409).send({ error: 'Narrative extraction is not configured' });
+    }
+
+    const version = await dependencies.manuscriptVersions.getProjectVersionBody(
+      params.data.projectId,
+      parsed.data.manuscriptVersionId
+    );
+    if (!version) return reply.code(404).send({ error: 'Manuscript version not found' });
+
+    const records = createNarrativeRecords({
+      projectId: params.data.projectId,
+      chapterId: version.chapterId,
+      manuscriptVersionId: version.versionId,
+      body: version.body,
+      sourceRunId: parsed.data.sourceRunId ?? 'agent_run_narrative_extraction',
+      now: new Date().toISOString()
+    });
+    for (const record of records) {
+      await dependencies.narrativeStates.upsert(record);
+    }
+
+    return reply.code(201).send({
+      projectId: params.data.projectId,
+      manuscriptVersionId: version.versionId,
+      created: records.map((record) => record.type),
+      records
+    });
+  });
+
   app.get<{ Params: { projectId: string }; Querystring: { currentChapter?: string } }>(
     '/narrative-intelligence/projects/:projectId/summary',
     async (request, reply) => {
@@ -236,4 +301,120 @@ function toClosureSummary(projectId: string, checklist: ReturnType<typeof create
 
 function isResolvedPromiseStatus(status: ReaderPromise['status']) {
   return status === 'PaidOff' || status === 'Fulfilled';
+}
+
+function createNarrativeRecords(input: {
+  projectId: string;
+  chapterId: string;
+  manuscriptVersionId: string;
+  body: string;
+  sourceRunId: string;
+  now: string;
+}) {
+  const title = firstSentence(input.body) || 'Accepted manuscript promise';
+  const promiseExtraction = extractPromiseCandidatesFromStructuredText({
+    projectId: input.projectId,
+    sourceRunId: input.sourceRunId,
+    acceptedText: input.body,
+    sceneNotes: {
+      chapterId: input.chapterId,
+      chapterNumber: 1,
+      promiseSignals: [
+        {
+          title,
+          surfaceClue: title,
+          hiddenQuestion: `What does ${title} imply?`,
+          readerExpectation: 'This accepted scene will receive follow-up.',
+          relatedEntities: [{ type: 'ManuscriptVersion', id: input.manuscriptVersionId }],
+          importance: 'Core',
+          payoffWindow: { startChapter: 1, endChapter: 3 },
+          confidence: 0.91
+        }
+      ]
+    }
+  });
+  const promise = promiseExtraction.candidates[0];
+  const metadata = [
+    {
+      version: 1,
+      source: 'accepted_manuscript_version',
+      sourceId: input.manuscriptVersionId,
+      note: input.sourceRunId,
+      createdAt: input.now
+    }
+  ];
+
+  return [
+    narrativeRecord(input, 'promise', promise?.id ?? `reader_promise_${input.manuscriptVersionId}`, promise, metadata),
+    narrativeRecord(
+      input,
+      'arc',
+      `arc_${input.manuscriptVersionId}`,
+      {
+        id: `arc_${input.manuscriptVersionId}`,
+        characterId: 'character_primary',
+        importance: 'Major',
+        status: 'Open',
+        summary: 'Primary character choice detected from accepted prose.',
+        currentChapter: 1,
+        targetChapter: 3
+      },
+      metadata
+    ),
+    narrativeRecord(
+      input,
+      'timeline_event',
+      `timeline_${input.manuscriptVersionId}`,
+      { manuscriptVersionId: input.manuscriptVersionId, chapterId: input.chapterId, summary: title },
+      metadata
+    ),
+    narrativeRecord(
+      input,
+      'world_rule',
+      `world_rule_${input.manuscriptVersionId}`,
+      { manuscriptVersionId: input.manuscriptVersionId, rule: title, status: 'Candidate' },
+      metadata
+    ),
+    narrativeRecord(
+      input,
+      'dependency_finding',
+      `dependency_${input.manuscriptVersionId}`,
+      {
+        source: { type: 'ManuscriptVersion', id: input.manuscriptVersionId },
+        target: { type: 'ReaderPromise', id: promise?.id ?? `reader_promise_${input.manuscriptVersionId}` },
+        dependencyType: 'introduces'
+      },
+      metadata
+    ),
+    narrativeRecord(
+      input,
+      'closure',
+      `closure_${input.manuscriptVersionId}`,
+      { manuscriptVersionId: input.manuscriptVersionId, status: 'NeedsResolution', promiseId: promise?.id },
+      metadata
+    )
+  ];
+}
+
+function narrativeRecord(
+  input: { projectId: string; now: string },
+  type: string,
+  id: string,
+  payload: unknown,
+  snapshotMetadata: Array<{ version: number; source: string; sourceId?: string; note?: string; createdAt: string }>
+) {
+  return {
+    id,
+    projectId: input.projectId,
+    type,
+    payload,
+    snapshotVersion: 1,
+    snapshotMetadata,
+    createdAt: input.now,
+    updatedAt: input.now
+  };
+}
+
+function firstSentence(text: string): string {
+  return text.split(/(?<=[.!?。！？])\s+/u)[0]?.trim() || text.trim();
 }

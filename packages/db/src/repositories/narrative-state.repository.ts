@@ -9,6 +9,7 @@ export type NarrativeStateType =
   | 'timeline_event'
   | 'world_rule'
   | 'dependency_finding'
+  | 'closure'
   | 'source_metadata';
 
 export interface NarrativeStateSnapshotMetadata {

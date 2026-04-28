@@ -241,7 +241,8 @@ export async function createPersistentApiRuntime(
       contextPacks,
       migrationHistory,
       narrativeIntelligence: {
-        narrativeStates
+        narrativeStates,
+        manuscriptVersions: manuscriptService
       },
       manuscriptService,
       orchestration,
