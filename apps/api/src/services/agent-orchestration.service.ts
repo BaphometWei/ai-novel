@@ -16,12 +16,14 @@ import {
 } from '@ai-novel/domain';
 import {
   createDurableJob,
+  assertAgentCanRunTask,
   createTaskContract,
   transitionJob,
   type DurableJob,
   type WorkflowRun,
   WorkflowRunner
 } from '@ai-novel/workflow';
+import type { ContextBuildService } from './context-build.service';
 
 export interface ProjectLookup {
   findById(id: string): Project | null | Promise<Project | null>;
@@ -59,6 +61,7 @@ export interface DurableJobStore {
 
 export interface AgentOrchestrationStores {
   projects: ProjectLookup;
+  contextBuildService?: ContextBuildService;
   contextPacks: ContextPackStore;
   artifacts?: ArtifactMetadataStore;
   artifactContent?: ArtifactContentStore;
@@ -78,7 +81,12 @@ export interface StartAgentOrchestrationInput {
   outputSchema: string;
   promptVersionId?: string;
   model?: string;
-  contextSections: ContextSection[];
+  contextSections?: ContextSection[];
+  retrieval?: {
+    query: string;
+    maxContextItems?: number;
+    maxSectionChars?: number;
+  };
 }
 
 export interface AgentOrchestrationResult {
@@ -146,6 +154,11 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
     if (!project) {
       throw new AgentOrchestrationError('Project not found', 404);
     }
+    try {
+      assertAgentCanRunTask(input.agentRole, input.taskType);
+    } catch (error) {
+      throw new AgentOrchestrationError(error instanceof Error ? error.message : 'Invalid agent task', 400);
+    }
 
     const promptVersionId = input.promptVersionId ?? 'prompt_default';
     const job = createDurableJob({
@@ -162,16 +175,27 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
     await this.stores.durableJobs.save(runningJob);
 
     try {
-      const baseContextPack = createContextPack({
-        taskGoal: input.taskGoal,
-        agentRole: input.agentRole,
-        riskLevel: input.riskLevel,
-        sections: input.contextSections,
-        citations: [],
-        exclusions: [],
-        warnings: [],
-        retrievalTrace: [`orchestration:${input.taskType}`]
-      });
+      const baseContextPack =
+        this.stores.contextBuildService && input.retrieval
+          ? await this.stores.contextBuildService.build({
+              projectId: input.projectId,
+              taskGoal: input.taskGoal,
+              agentRole: input.agentRole,
+              riskLevel: input.riskLevel,
+              query: input.retrieval.query,
+              maxContextItems: input.retrieval.maxContextItems,
+              maxSectionChars: input.retrieval.maxSectionChars
+            })
+          : createContextPack({
+              taskGoal: input.taskGoal,
+              agentRole: input.agentRole,
+              riskLevel: input.riskLevel,
+              sections: input.contextSections ?? [],
+              citations: [],
+              exclusions: [],
+              warnings: [],
+              retrievalTrace: [`orchestration:${input.taskType}`]
+            });
 
       const agentRun = createAgentRun({
         agentName: input.agentRole,

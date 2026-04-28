@@ -16,12 +16,19 @@ const orchestrationBodySchema = z.object({
   outputSchema: z.string().min(1),
   promptVersionId: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
+  retrieval: z
+    .object({
+      query: z.string().min(1),
+      maxContextItems: z.number().int().positive().optional(),
+      maxSectionChars: z.number().int().positive().optional()
+    })
+    .optional(),
   contextSections: z.array(
     z.object({
       name: z.string().min(1),
       content: z.string()
     })
-  )
+  ).optional()
 });
 
 const orchestrationParamsSchema = z.object({

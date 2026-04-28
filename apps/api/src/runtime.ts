@@ -51,10 +51,12 @@ import type { ScheduledBackupRouteStore } from './routes/scheduled-backup.routes
 import { createRepositorySearchStore } from './routes/search.routes';
 import { createDefaultReviewLearningDependencies } from './routes/review-learning.routes';
 import { createAgentOrchestrationService } from './services/agent-orchestration.service';
+import { createContextBuildService } from './services/context-build.service';
 import { ManuscriptService } from './services/manuscript.service';
 import { createProviderRuntime } from './services/provider-runtime';
 import { PersistentProjectService } from './services/project.service';
 import { SettingsService } from './services/settings.service';
+import { createPersistentWritingRunService } from './services/writing-run.service';
 
 type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -135,6 +137,11 @@ export async function createPersistentApiRuntime(
     fallbackProvider: options.fallbackProvider
   });
   const settingsService = new SettingsService(settings);
+  const searchStore = createRepositorySearchStore(search);
+  const contextBuildService = createContextBuildService({
+    search: searchStore,
+    settingsService
+  });
 
   const stores = {
     agentRuns: {
@@ -176,6 +183,7 @@ export async function createPersistentApiRuntime(
   const orchestration = createAgentOrchestrationService(
     {
       projects: projectService,
+      contextBuildService,
       contextPacks,
       artifacts,
       artifactContent,
@@ -201,7 +209,6 @@ export async function createPersistentApiRuntime(
     ...createDefaultReviewLearningDependencies(),
     store: reviewLearning
   };
-  const searchStore = createRepositorySearchStore(search);
   const backup = createPersistentBackupDependencies({
     root: resolveBackupRoot(filename),
     projects: projectRepository,
@@ -236,6 +243,18 @@ export async function createPersistentApiRuntime(
       settingsService,
       versionHistory,
       workbench: stores.workbench,
+      writingRuns: createPersistentWritingRunService({
+        projects: projectService,
+        contextBuildService,
+        providerRuntime,
+        contextPacks,
+        artifacts,
+        artifactContent,
+        agentRuns,
+        llmCallLogs,
+        workflowRuns,
+        durableJobs
+      }),
       workflow: stores.workflow
     }),
     database,

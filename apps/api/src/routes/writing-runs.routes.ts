@@ -1,9 +1,10 @@
 import type { EntityId, EntityPrefix } from '@ai-novel/domain';
-import { runWritingWorkflow, type WritingWorkflowDependencies } from '@ai-novel/workflow';
+import { runWritingWorkflow, type WritingWorkflowDependencies, type WritingWorkflowInput } from '@ai-novel/workflow';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
+import type { PersistentWritingRunService } from '../services/writing-run.service';
 
-export type WritingRunRouteDependencies = WritingWorkflowDependencies;
+export type WritingRunRouteDependencies = WritingWorkflowDependencies | PersistentWritingRunService;
 
 const entityIdSchema = <Prefix extends EntityPrefix>(prefix: Prefix) =>
   z.custom<EntityId<Prefix>>((value) => typeof value === 'string' && value.startsWith(`${prefix}_`), {
@@ -52,16 +53,23 @@ export function registerWritingRunRoutes(app: FastifyInstance, dependencies: Wri
       return invalidPayload(reply);
     }
 
-    const result = await runWritingWorkflow(
-      {
-        projectId: params.data.projectId,
-        target: parsed.data.target,
-        contract: parsed.data.contract,
-        retrieval: parsed.data.retrieval
-      },
-      dependencies
-    );
+    const input: WritingWorkflowInput = {
+      projectId: params.data.projectId,
+      target: parsed.data.target,
+      contract: parsed.data.contract,
+      retrieval: parsed.data.retrieval
+    };
+
+    const result = isPersistentWritingRunService(dependencies)
+      ? await dependencies.start(input)
+      : await runWritingWorkflow(input, dependencies);
 
     return reply.code(201).send(result);
   });
+}
+
+function isPersistentWritingRunService(
+  dependencies: WritingRunRouteDependencies
+): dependencies is PersistentWritingRunService {
+  return 'start' in dependencies;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defineAgentRoles } from './agents';
+import { assertAgentCanRunTask, defineAgentRoles } from './agents';
 
 describe('agent roles', () => {
   it('defines typed artifact contracts for the full creative room', () => {
@@ -23,5 +23,13 @@ describe('agent roles', () => {
       type: 'draft_prose',
       ownership: 'agent_draft_until_author_acceptance'
     });
+  });
+
+  it('rejects task types that do not match the selected role', () => {
+    expect(() => assertAgentCanRunTask('Planner', 'chapter_planning')).not.toThrow();
+    expect(() => assertAgentCanRunTask('Planner', 'writing_draft')).toThrow(
+      'Agent role Planner cannot run task type writing_draft'
+    );
+    expect(() => assertAgentCanRunTask('Unknown', 'chapter_planning')).toThrow('Unknown agent role: Unknown');
   });
 });
