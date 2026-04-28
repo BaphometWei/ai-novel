@@ -48,3 +48,9 @@ npm run verify:local
 ## Current Test Boundary
 
 The current deterministic/local verification path is intended to be safe for local development. It avoids paid model calls and does not require or include real provider secrets. Real-provider smoke tests should remain blocked until the API key, model budget, repository secrets, and logging/redaction expectations above are approved.
+
+### Git Push Transport Interruption
+
+- 2026-04-28: `git push origin main` repeatedly failed after local commits with `Connection closed by 198.18.0.x port 443`.
+- `git ls-remote origin HEAD` succeeded and reported remote HEAD at `9537723d48bd1e6858d4c115108a4c6da0838fbe`, so read access is available while push transport is currently interrupted.
+- Local fallback: continue repository-local implementation with frequent commits on `main`; retry normal non-force push after each phase.
