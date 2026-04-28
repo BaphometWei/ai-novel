@@ -28,7 +28,7 @@
 
 - [x] **Step 1: Replace stale completion status**
 
-Update the completion checklist and push transport note to reflect latest verified `main` commit `2a01233 feat: close remaining local gap follow-ups`.
+Update the completion checklist and push transport note to reflect latest verified local implementation commit `1b9ffb4 feat: finish local remaining gaps`.
 
 - [x] **Step 2: Verify no stale local completion markers remain**
 
@@ -191,7 +191,7 @@ git status --short --branch
 git diff --stat
 ```
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 Run:
 
@@ -202,3 +202,5 @@ git push origin main
 ```
 
 Expected: normal non-force push succeeds.
+
+Observed: normal non-force push succeeded for `1b9ffb4 feat: finish local remaining gaps`; a docs-only status follow-up records this completed push.

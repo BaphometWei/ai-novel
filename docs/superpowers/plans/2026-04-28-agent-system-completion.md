@@ -1665,5 +1665,5 @@ Use subagents only after Task 1 establishes shared persistent writing/context co
 - [x] Observability reports persisted/live local telemetry through project-scoped summaries.
 - [x] High-value browser acceptance uses the real local API for writing, acceptance, approval promotion, backup restore, and observability checks.
 - [x] `npm run verify:local` passes after the final documentation and E2E updates.
-- [x] All strict local and follow-up changes are committed through `2a01233 feat: close remaining local gap follow-ups`.
-- [x] `git push origin main` succeeded; `origin/main` and `origin/HEAD` were later observed at `2a01233`.
+- [x] All strict local and follow-up changes are committed through `1b9ffb4 feat: finish local remaining gaps`.
+- [x] `git push origin main` succeeded; `main` was normally pushed through `1b9ffb4`.
