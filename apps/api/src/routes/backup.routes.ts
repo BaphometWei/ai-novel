@@ -36,23 +36,42 @@ export function registerBackupRoutes(app: FastifyInstance, deps: BackupWorkflowD
     const parsed = createBackupSchema.safeParse(request.body ?? {});
     if (!parsed.success) return invalidPayload(reply);
 
-    const result = await createBackup({ projectId: params.projectId, ...parsed.data }, deps);
-    return reply.code(201).send(result);
+    try {
+      const result = await createBackup({ projectId: params.projectId, ...parsed.data }, deps);
+      return reply.code(201).send(result);
+    } catch (error) {
+      if (isDependencyNotConfigured(error)) return reply.code(503).send({ error: error.message });
+      throw error;
+    }
   });
 
   app.post('/backups/verify', async (request, reply) => {
     const parsed = verifyBackupSchema.safeParse(request.body);
     if (!parsed.success) return invalidPayload(reply);
 
-    const result = await verifyBackup(parsed.data, deps);
-    return reply.send(result);
+    try {
+      const result = await verifyBackup(parsed.data, deps);
+      return reply.send(result);
+    } catch (error) {
+      if (isDependencyNotConfigured(error)) return reply.code(503).send({ error: error.message });
+      throw error;
+    }
   });
 
   app.post('/backups/restore', async (request, reply) => {
     const parsed = restoreBackupSchema.safeParse(request.body);
     if (!parsed.success) return invalidPayload(reply);
 
-    const result = await restoreBackup(parsed.data, deps);
-    return reply.send(result);
+    try {
+      const result = await restoreBackup(parsed.data, deps);
+      return reply.send(result);
+    } catch (error) {
+      if (isDependencyNotConfigured(error)) return reply.code(503).send({ error: error.message });
+      throw error;
+    }
   });
+}
+
+function isDependencyNotConfigured(error: unknown): error is Error {
+  return error instanceof Error && error.message === 'Backup dependencies are not configured';
 }

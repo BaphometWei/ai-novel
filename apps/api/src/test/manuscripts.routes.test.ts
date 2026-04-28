@@ -129,6 +129,54 @@ describe('manuscript chapter API routes', () => {
     runtime.database.client.close();
   });
 
+  it('indexes inline chapter body text for real local global search', async () => {
+    const runtime = await createPersistentApiRuntime(':memory:');
+
+    const projectResponse = await runtime.app.inject({
+      method: 'POST',
+      url: '/projects',
+      payload: {
+        title: 'Long Night',
+        language: 'zh-CN',
+        targetAudience: 'Chinese web-novel readers'
+      }
+    });
+
+    const createChapterResponse = await runtime.app.inject({
+      method: 'POST',
+      url: `/projects/${projectResponse.json().id}/chapters`,
+      payload: {
+        title: 'Lantern Reveal',
+        order: 1,
+        body: 'Mira hides the brass lantern key beneath the archive stairs.'
+      }
+    });
+    const searchResponse = await runtime.app.inject({
+      method: 'POST',
+      url: '/search',
+      payload: {
+        projectId: projectResponse.json().id,
+        query: 'brass lantern'
+      }
+    });
+
+    expect(createChapterResponse.statusCode).toBe(201);
+    expect(searchResponse.statusCode).toBe(200);
+    expect(searchResponse.json()).toEqual({
+      results: [
+        expect.objectContaining({
+          id: createChapterResponse.json().version.id,
+          projectId: projectResponse.json().id,
+          type: 'manuscript',
+          title: 'Lantern Reveal',
+          snippet: expect.stringContaining('brass')
+        })
+      ]
+    });
+    await runtime.app.close();
+    runtime.database.client.close();
+  });
+
   it('reads the current chapter body text from its manuscript version artifact', async () => {
     const runtime = await createPersistentApiRuntime(':memory:');
 

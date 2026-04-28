@@ -72,7 +72,7 @@ describe('API app', () => {
   });
 
   it('registers workflow surface routes in the app shell', async () => {
-    const app = buildApp();
+    const app = buildApp({ harnessMode: 'demo' });
 
     const agentRoom = await app.inject({ method: 'GET', url: '/agent-room/runs' });
     const memory = await app.inject({
@@ -96,6 +96,82 @@ describe('API app', () => {
     expect(agentRoom.json()).toEqual([]);
     expect(memory.statusCode).toBe(201);
     expect(memory.json()).toEqual({ candidates: [], approvalRequests: [] });
+    expect(backup.statusCode).toBe(201);
+    expect(backup.json()).toMatchObject({
+      job: { type: 'backup.create', status: 'Succeeded', projectId: 'project_app' },
+      status: { ok: true, stage: 'created' }
+    });
+  });
+
+  it('does not silently use demo writing or backup dependencies by default', async () => {
+    const app = buildApp();
+
+    const writing = await app.inject({
+      method: 'POST',
+      url: '/projects/project_app/writing-runs',
+      payload: {
+        target: {
+          manuscriptId: 'manuscript_app',
+          chapterId: 'chapter_app',
+          range: 'chapter_1'
+        },
+        contract: {
+          authorshipLevel: 'A3',
+          goal: 'Draft without configured runtime',
+          mustWrite: 'This should not use a silent fake provider.',
+          wordRange: { min: 100, max: 200 },
+          forbiddenChanges: ['Do not hide missing dependencies'],
+          acceptanceCriteria: ['Returns a clear error']
+        },
+        retrieval: { query: 'missing runtime' }
+      }
+    });
+    const backup = await app.inject({
+      method: 'POST',
+      url: '/projects/project_app/backups',
+      payload: { reason: 'manual' }
+    });
+
+    expect(writing.statusCode).toBe(503);
+    expect(writing.json()).toEqual({ error: 'Writing run dependencies are not configured' });
+    expect(backup.statusCode).toBe(503);
+    expect(backup.json()).toEqual({ error: 'Backup dependencies are not configured' });
+  });
+
+  it('preserves deterministic writing and backup behavior in explicit demo harness mode', async () => {
+    const app = buildApp({ harnessMode: 'demo' });
+
+    const writing = await app.inject({
+      method: 'POST',
+      url: '/projects/project_app/writing-runs',
+      payload: {
+        target: {
+          manuscriptId: 'manuscript_app',
+          chapterId: 'chapter_app',
+          range: 'chapter_1'
+        },
+        contract: {
+          authorshipLevel: 'A3',
+          goal: 'Draft in demo mode',
+          mustWrite: 'Use the explicit demo fake provider.',
+          wordRange: { min: 100, max: 200 },
+          forbiddenChanges: ['Do not call external providers'],
+          acceptanceCriteria: ['Returns a deterministic draft']
+        },
+        retrieval: { query: 'demo runtime' }
+      }
+    });
+    const backup = await app.inject({
+      method: 'POST',
+      url: '/projects/project_app/backups',
+      payload: { reason: 'manual' }
+    });
+
+    expect(writing.statusCode).toBe(201);
+    expect(writing.json()).toMatchObject({
+      status: 'AwaitingAcceptance',
+      draftArtifact: { text: 'Deterministic writing draft' }
+    });
     expect(backup.statusCode).toBe(201);
     expect(backup.json()).toMatchObject({
       job: { type: 'backup.create', status: 'Succeeded', projectId: 'project_app' },

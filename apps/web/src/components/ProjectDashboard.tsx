@@ -34,6 +34,7 @@ export function ProjectDashboard({ client, onProjectLoaded }: ProjectDashboardPr
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<GlobalSearchResult[]>([]);
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
+  const [policyError, setPolicyError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -99,12 +100,17 @@ export function ProjectDashboard({ client, onProjectLoaded }: ProjectDashboardPr
   async function updateExternalModelPolicy() {
     if (!loadedProject || state.status !== 'loaded') return;
 
-    const updatedProject = await resolvedClient.updateProjectExternalModelPolicy(
-      loadedProject.id,
-      nextExternalModelPolicy
-    );
-    setState({ status: 'loaded', project: updatedProject, chapters: state.chapters });
-    onProjectLoaded?.(updatedProject);
+    setPolicyError(null);
+    try {
+      const updatedProject = await resolvedClient.updateProjectExternalModelPolicy(
+        loadedProject.id,
+        nextExternalModelPolicy
+      );
+      setState({ status: 'loaded', project: updatedProject, chapters: state.chapters });
+      onProjectLoaded?.(updatedProject);
+    } catch (error) {
+      setPolicyError(error instanceof Error ? error.message : 'Unable to update external model policy');
+    }
   }
 
   return (
@@ -171,6 +177,7 @@ export function ProjectDashboard({ client, onProjectLoaded }: ProjectDashboardPr
           <button type="button" onClick={() => void updateExternalModelPolicy()}>
             {externalModelPolicy === 'Allowed' ? 'Disable external models' : 'Allow external models'}
           </button>
+          {policyError ? <p role="alert">{policyError}</p> : null}
         </section>
       ) : null}
       <div className="status-grid">

@@ -30,6 +30,16 @@ export interface ManuscriptArtifactStore {
   findByHash(hash: string): Promise<ArtifactRecord | null>;
 }
 
+export interface ManuscriptSearchIndexer {
+  indexDocument(document: {
+    id: string;
+    projectId: string;
+    sourceType: 'manuscript';
+    title: string;
+    body: string;
+  }): Promise<void>;
+}
+
 export interface CreateProjectChapterInput {
   title: string;
   order: number;
@@ -52,7 +62,8 @@ export class ManuscriptService {
     private readonly projects: ManuscriptProjectLookup,
     private readonly manuscripts: ManuscriptStore,
     private readonly artifacts?: ManuscriptArtifactStore,
-    private readonly artifactContent?: ArtifactStore
+    private readonly artifactContent?: ArtifactStore,
+    private readonly searchIndexer?: ManuscriptSearchIndexer
   ) {}
 
   async listProjectChapters(projectId: EntityId<'project'>): Promise<ChapterWithVersions[] | null> {
@@ -132,7 +143,7 @@ export class ManuscriptService {
       name: `${project.id}-${input.title}-v1.md`,
       source: 'user'
     });
-    return this.manuscripts.createChapterWithVersion({
+    const result = await this.manuscripts.createChapterWithVersion({
       manuscriptId: manuscript.id,
       title: input.title,
       order: input.order,
@@ -140,26 +151,43 @@ export class ManuscriptService {
       status: input.status,
       metadata: input.metadata
     });
+    await this.indexManuscriptVersion({
+      id: result.version.id,
+      projectId,
+      title: input.title,
+      body: input.body,
+      bodyArtifactId
+    });
+    return result;
   }
 
   async addChapterVersion(chapterId: EntityId<'chapter'>, input: CreateChapterVersionInput): Promise<ChapterVersionRecord> {
-    if (input.body && !input.bodyArtifactId) {
-      const chapter = await this.manuscripts.findChapterById(chapterId);
-      if (!chapter) throw new Error(`Chapter not found: ${chapterId}`);
-    }
+    const chapter = await this.manuscripts.findChapterById(chapterId);
+    if (input.body && !input.bodyArtifactId && !chapter) throw new Error(`Chapter not found: ${chapterId}`);
     const bodyArtifactId = await this.resolveBodyArtifactId({
       body: input.body,
       bodyArtifactId: input.bodyArtifactId,
       name: `${chapterId}-revision.md`,
       source: 'user'
     });
-    return this.manuscripts.addChapterVersion({
+    const version = await this.manuscripts.addChapterVersion({
       chapterId,
       bodyArtifactId,
       status: input.status,
       metadata: input.metadata,
       makeCurrent: input.makeCurrent
     });
+    const indexedChapter = chapter ?? (await this.manuscripts.findChapterById(chapterId));
+    if (indexedChapter) {
+      await this.indexManuscriptVersion({
+        id: version.id,
+        projectId: indexedChapter.projectId,
+        title: indexedChapter.title,
+        body: input.body,
+        bodyArtifactId
+      });
+    }
+    return version;
   }
 
   async resolveGovernedVersion(input: ResolveGovernedVersionInput): Promise<ChapterVersionRecord | null> {
@@ -206,5 +234,37 @@ export class ManuscriptService {
     });
     await this.artifacts.save(artifact);
     return artifact.id;
+  }
+
+  private async indexManuscriptVersion(input: {
+    id: string;
+    projectId: string;
+    title: string;
+    body?: string;
+    bodyArtifactId: string;
+  }): Promise<void> {
+    if (!this.searchIndexer) return;
+    const body = input.body ?? (await this.readBodyForIndex(input.bodyArtifactId));
+    if (!body) return;
+
+    await this.searchIndexer.indexDocument({
+      id: input.id,
+      projectId: input.projectId,
+      sourceType: 'manuscript',
+      title: input.title,
+      body
+    });
+  }
+
+  private async readBodyForIndex(bodyArtifactId: string): Promise<string | null> {
+    if (!this.artifacts || !this.artifactContent) return null;
+    const artifact = await this.artifacts.findById(bodyArtifactId);
+    if (!artifact) return null;
+
+    try {
+      return await this.artifactContent.readText(artifact.uri);
+    } catch {
+      return null;
+    }
   }
 }

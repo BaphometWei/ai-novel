@@ -58,6 +58,11 @@ export function NarrativeIntelligencePanel({
 
   const promiseState = summary?.promiseStates[0] ?? null;
   const closureResult = summary?.closure ?? null;
+  const hasClosureData = Boolean(
+    closureResult &&
+      (closureResult.readyCount > 0 || closureResult.blockerCount > 0 || closureResult.blockers.length > 0)
+  );
+  const hasSummary = Boolean(summary) && !loading && !error;
 
   return (
     <section className="surface-panel" aria-labelledby="narrative-intelligence-title">
@@ -85,11 +90,12 @@ export function NarrativeIntelligencePanel({
               </div>
             </dl>
           ) : null}
+          {hasSummary && !promiseState ? <p>No reader promise data yet.</p> : null}
         </section>
 
         <section className="work-surface" aria-label="Closure blockers">
           <h3>Closure Blockers</h3>
-          {closureResult ? (
+          {closureResult && hasClosureData ? (
             <>
               <p>{closureResult.blockerCount} blockers</p>
               <dl className="compact-list">
@@ -102,6 +108,7 @@ export function NarrativeIntelligencePanel({
               </dl>
             </>
           ) : null}
+          {hasSummary && !hasClosureData ? <p>No closure data yet.</p> : null}
         </section>
       </div>
     </section>

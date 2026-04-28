@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { registerBackupRoutes } from '../routes/backup.routes';
 import { createPersistentApiRuntime } from '../runtime';
@@ -171,6 +171,64 @@ describe('backup API routes', () => {
     }
   });
 
+  it('restores artifact file content from a portable backup into a different artifact root', async () => {
+    const sourceRoot = await mkdtemp(join(tmpdir(), 'ai-novel-portable-source-'));
+    const targetRoot = await mkdtemp(join(tmpdir(), 'ai-novel-portable-target-'));
+    const sourceRuntime = await createPersistentApiRuntime(join(sourceRoot, 'source.sqlite'));
+    let targetRuntime: Awaited<ReturnType<typeof createPersistentApiRuntime>> | null = null;
+
+    try {
+      const source = await createProject(sourceRuntime.app, 'Portable Source');
+      await createChapter(sourceRuntime.app, source.id, {
+        title: 'Portable Artifact Chapter',
+        body: 'This body must travel inside the portable backup.'
+      });
+
+      const backupResponse = await sourceRuntime.app.inject({
+        method: 'POST',
+        url: `/projects/${source.id}/backups`,
+        payload: { reason: 'portable-artifact-check', requestedBy: 'operator' }
+      });
+      expect(backupResponse.statusCode).toBe(201);
+      const backup = backupResponse.json();
+
+      const sourceBackupPath = join(sourceRoot, 'backups', backup.record.path);
+      const targetBackupPath = join(targetRoot, 'backups', backup.record.path);
+      await mkdir(dirname(targetBackupPath), { recursive: true });
+      await copyFile(sourceBackupPath, targetBackupPath);
+
+      targetRuntime = await createPersistentApiRuntime(join(targetRoot, 'target.sqlite'));
+      const restoredProjectId = 'project_portable_restored';
+      const restoreResponse = await targetRuntime.app.inject({
+        method: 'POST',
+        url: '/backups/restore',
+        payload: { path: backup.record.path, targetProjectId: restoredProjectId, requestedBy: 'operator' }
+      });
+      expect(restoreResponse.statusCode).toBe(200);
+
+      const restoredChaptersResponse = await targetRuntime.app.inject({
+        method: 'GET',
+        url: `/projects/${restoredProjectId}/chapters`
+      });
+      expect(restoredChaptersResponse.statusCode).toBe(200);
+      const [chapter] = restoredChaptersResponse.json();
+
+      const restoredBodyResponse = await targetRuntime.app.inject({
+        method: 'GET',
+        url: `/chapters/${chapter.id}/current-body`
+      });
+      expect(restoredBodyResponse.statusCode).toBe(200);
+      expect(restoredBodyResponse.json()).toMatchObject({
+        body: 'This body must travel inside the portable backup.'
+      });
+    } finally {
+      await closeRuntime(sourceRuntime);
+      if (targetRuntime) await closeRuntime(targetRuntime);
+      await removeTempRoot(sourceRoot);
+      await removeTempRoot(targetRoot);
+    }
+  }, 30_000);
+
   it('rehearses temp SQLite backup verify restore rollback and cross-project isolation', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ai-novel-recovery-'));
     const runtime = await createPersistentApiRuntime(join(root, 'recovery.sqlite'));
@@ -314,6 +372,12 @@ async function removeTempRoot(root: string) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
+}
+
+async function closeRuntime(runtime: Awaited<ReturnType<typeof createPersistentApiRuntime>>) {
+  await runtime.database.client.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+  await runtime.app.close();
+  runtime.database.client.close();
 }
 
 async function createProject(app: ReturnType<typeof Fastify>, title: string) {

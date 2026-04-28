@@ -69,6 +69,9 @@ export function registerWritingRunRoutes(app: FastifyInstance, dependencies: Wri
       if (error instanceof Error && error.message === 'External model use is disabled for this project') {
         return reply.code(403).send({ error: error.message });
       }
+      if (error instanceof Error && error.message === 'Writing run dependencies are not configured') {
+        return reply.code(503).send({ error: error.message });
+      }
       throw error;
     }
 

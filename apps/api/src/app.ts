@@ -36,6 +36,7 @@ import { ProjectService, type ProjectServiceLike } from './services/project.serv
 import type { SettingsService } from './services/settings.service';
 
 export interface BuildAppOptions {
+  harnessMode?: 'strict' | 'demo';
   agentRoom?: AgentRoomRepositories;
   agentRuns?: AgentRunRouteStores;
   acceptanceWorkflow?: AcceptanceWorkflowService;
@@ -66,6 +67,7 @@ export interface BuildAppOptions {
 export function buildApp(options: BuildAppOptions = {}) {
   const app = Fastify({ logger: false });
   const projectService = options.projectService ?? new ProjectService();
+  const harnessMode = options.harnessMode ?? 'strict';
 
   app.get('/health', async () => ({
     ok: true,
@@ -76,10 +78,16 @@ export function buildApp(options: BuildAppOptions = {}) {
   registerSettingsRoutes(app, options.settingsService);
   registerAgentRoomRoutes(app, options.agentRoom ?? createEmptyAgentRoomRepositories());
   registerApprovalRoutes(app, options.approvals ?? createInMemoryApprovalStore());
-  registerBackupRoutes(app, options.backup ?? createInMemoryBackupDependencies());
+  registerBackupRoutes(
+    app,
+    options.backup ?? (harnessMode === 'demo' ? createInMemoryBackupDependencies() : createUnavailableBackupDependencies())
+  );
   registerImportExportRoutes(app, options.importExport ?? createInMemoryImportExportStore());
   registerMemoryRoutes(app, options.memory ?? createInMemoryMemoryDependencies());
-  registerWritingRunRoutes(app, options.writingRuns ?? createDefaultWritingRunDependencies());
+  registerWritingRunRoutes(
+    app,
+    options.writingRuns ?? (harnessMode === 'demo' ? createDefaultWritingRunDependencies() : createUnavailableWritingRunDependencies())
+  );
   registerAgentRunRoutes(app, options.agentRuns);
   registerObservabilityRoutes(app, options.observability ?? options.agentRuns ?? createInMemoryAgentRunStores());
   registerMigrationHistoryRoutes(app, options.migrationHistory ?? createInMemoryMigrationHistoryStore());
@@ -188,6 +196,46 @@ function createInMemoryBackupDependencies(): BackupWorkflowDependencies {
   };
 }
 
+function createUnavailableBackupDependencies(): BackupWorkflowDependencies {
+  return {
+    clock: { now: () => new Date().toISOString() },
+    ids: {
+      createJobId: () => createLocalId('backup_job'),
+      createBackupId: () => createLocalId('backup'),
+      createRestoreId: () => createLocalId('restore')
+    },
+    hash: (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex'),
+    store: {
+      writeText() {
+        throw new Error('Backup dependencies are not configured');
+      },
+      readText() {
+        throw new Error('Backup dependencies are not configured');
+      }
+    },
+    repository: {
+      readProjectSnapshot() {
+        throw new Error('Backup dependencies are not configured');
+      },
+      backupPathFor(backupId) {
+        return `unconfigured://${backupId}.json`;
+      },
+      saveBackupRecord() {
+        throw new Error('Backup dependencies are not configured');
+      },
+      findBackupByPath() {
+        throw new Error('Backup dependencies are not configured');
+      },
+      restoreProject() {
+        throw new Error('Backup dependencies are not configured');
+      },
+      saveRestoreRecord() {
+        throw new Error('Backup dependencies are not configured');
+      }
+    }
+  };
+}
+
 function createInMemoryMemoryDependencies(): MemoryRouteDependencies {
   return {
     extractor: {
@@ -225,6 +273,14 @@ function createDefaultWritingRunDependencies(): WritingRunRouteDependencies {
         warnings: [],
         retrievalTrace: [`query:${input.query}`]
       });
+    }
+  };
+}
+
+function createUnavailableWritingRunDependencies(): WritingRunRouteDependencies {
+  return {
+    async start() {
+      throw new Error('Writing run dependencies are not configured');
     }
   };
 }

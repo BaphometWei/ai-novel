@@ -40,6 +40,18 @@ describe('ProjectDashboard', () => {
     expect(client.updateProjectExternalModelPolicy).toHaveBeenCalledWith('project_1', 'Disabled');
   });
 
+  it('shows external model policy update errors without changing the loaded policy', async () => {
+    const client = mockClient({ rejectPolicyUpdate: true });
+
+    render(<ProjectDashboard client={client} />);
+
+    expect(await screen.findByText('External models allowed')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Disable external models' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Policy update failed');
+    expect(screen.getByText('External models allowed')).toBeInTheDocument();
+  });
+
   it('shows an error state when the project summary cannot be loaded', async () => {
     render(<ProjectDashboard client={mockClient({ reject: true })} />);
 
@@ -120,7 +132,7 @@ describe('ProjectDashboard', () => {
   });
 });
 
-function mockClient(options: { reject?: boolean } = {}): ApiClient {
+function mockClient(options: { reject?: boolean; rejectPolicyUpdate?: boolean } = {}): ApiClient {
   return {
     fetchHealth: async () => ({ ok: true, service: 'test' }),
     listProjects: async () => {
@@ -133,12 +145,15 @@ function mockClient(options: { reject?: boolean } = {}): ApiClient {
       status: 'Active',
       externalModelPolicy: 'Allowed'
     }),
-    updateProjectExternalModelPolicy: vi.fn(async (_projectId, externalModelPolicy) => ({
-      id: 'project_1',
-      title: 'Long Night',
-      status: 'Active',
-      externalModelPolicy
-    })),
+    updateProjectExternalModelPolicy: vi.fn(async (_projectId, externalModelPolicy) => {
+      if (options.rejectPolicyUpdate) throw new Error('Policy update failed');
+      return {
+        id: 'project_1',
+        title: 'Long Night',
+        status: 'Active',
+        externalModelPolicy
+      };
+    }),
     listProjectChapters: async () => [
       { id: 'chapter_1', title: 'Opening' },
       { id: 'chapter_2', title: 'Reversal' }

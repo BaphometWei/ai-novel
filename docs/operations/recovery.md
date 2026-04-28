@@ -126,6 +126,8 @@ Verify every backup before trusting it:
 - Confirm the bundle manifest exists and names all expected sections.
 - Check section hashes against the manifest.
 - Confirm artifact paths referenced in metadata exist in the copied artifact directory.
+- Confirm portable project backup bundles include the artifact content needed by restored manuscript, context-pack, report, and generated-output records.
+- For portability checks, restore into a workspace with a different artifact root and verify restored chapter body text and artifact-backed records load without access to the source artifact root.
 - Run SQLite `quick_check` and `integrity_check` on copied database files when the backup includes raw SQLite.
 - Record the source commit, source project id, backup path, created timestamp, requester, and verification result.
 - For project backups, confirm unrelated project artifacts and runs are absent from the backup envelope.
@@ -139,12 +141,15 @@ Rehearse restore into an isolated target project before replacing existing data:
 3. Restore the backup into a new target project id.
 4. Start local services.
 5. Confirm the restored project opens, manuscripts load, artifacts resolve, approvals are visible, durable jobs have expected status, and observability summaries do not invent missing data.
-6. Confirm the restore record includes rollback actions, especially `delete_project` for new-target rehearsal restores.
-7. Confirm unrelated projects still load with their original chapters and artifact references.
-8. Run `npm run rehearse:local-production` for a focused rehearsal or `npm run verify:local` for the full local gate.
-9. Record rehearsal outcome and any manual fixes.
+6. For portable project backups, confirm artifact content was restored under the target artifact root rather than read from the source root.
+7. Confirm the restore record includes rollback actions, especially `delete_project` for new-target rehearsal restores.
+8. Confirm unrelated projects still load with their original chapters and artifact references.
+9. Run `npm run rehearse:local-production` for a focused rehearsal or `npm run verify:local` for the full local gate.
+10. Record rehearsal outcome and any manual fixes.
 
 Only after a successful rehearsal should an operator approve a replace-in-place restore.
+
+These local portability checks increase confidence in backup and restore mechanics, but they do not complete production disaster recovery. Production readiness still requires approved infrastructure, off-host retention, credential handling, monitoring, restore objectives, and operator rehearsal policy.
 
 ## Migration Failure Recovery
 

@@ -37,6 +37,16 @@ describe('NarrativeIntelligencePanel', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Narrative inspect failed');
   });
 
+  it('shows explicit empty states for project-backed narrative data', async () => {
+    render(<NarrativeIntelligencePanel client={mockNarrativeClient({ empty: true })} projectId="project_1" />);
+
+    const promise = await screen.findByLabelText('Reader promise readiness');
+    expect(within(promise).getByText('No reader promise data yet.')).toBeInTheDocument();
+
+    const closure = screen.getByLabelText('Closure blockers');
+    expect(within(closure).getByText('No closure data yet.')).toBeInTheDocument();
+  });
+
   it('shows an empty state without calling the API when no project is selected', async () => {
     const client = mockNarrativeClient();
 
@@ -83,10 +93,18 @@ describe('narrative intelligence API client helpers', () => {
   });
 });
 
-function mockNarrativeClient(options: { reject?: boolean } = {}): NarrativeIntelligenceApiClient {
+function mockNarrativeClient(options: { reject?: boolean; empty?: boolean } = {}): NarrativeIntelligenceApiClient {
   return {
     getNarrativeIntelligenceSummary: vi.fn(async () => {
       if (options.reject) throw new Error('Narrative inspect failed');
+      if (options.empty) {
+        return {
+          projectId: 'project_1',
+          currentChapter: 7,
+          promiseStates: [],
+          closure: { projectId: 'project_1', readyCount: 0, blockerCount: 0, blockers: [] }
+        };
+      }
       return narrativeSummaryResult;
     }),
     inspectReaderPromise: vi.fn(async () => {

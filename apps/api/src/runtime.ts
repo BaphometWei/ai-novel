@@ -31,7 +31,7 @@ import {
   type ProviderSettingsSaveInput,
   WorkflowRunRepository
 } from '@ai-novel/db';
-import { FilesystemArtifactStore } from '@ai-novel/artifacts';
+import { FilesystemArtifactStore, type ArtifactStore } from '@ai-novel/artifacts';
 import { createProjectBundle, type EntityId, type Project, type ProviderAdapter } from '@ai-novel/domain';
 import type {
   AgentRoomActionRepositories,
@@ -43,7 +43,7 @@ import { createBackup, restoreBackup, verifyBackup } from '@ai-novel/workflow';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { buildApp } from './app';
 import { createRepositoryApprovalStore } from './routes/approvals.routes';
 import { configurePersistentBranchRetconRouteStore } from './routes/branch-retcon.routes';
@@ -113,14 +113,14 @@ export async function createPersistentApiRuntime(
   const contextPacks = new ContextPackRepository(database.db);
   const agentRuns = new AgentRunRepository(database.db);
   const manuscripts = new ManuscriptRepository(database.db);
-  const manuscriptService = new ManuscriptService(projectService, manuscripts, artifacts, artifactContent);
+  const search = new SearchRepository(database.client);
+  const manuscriptService = new ManuscriptService(projectService, manuscripts, artifacts, artifactContent, search);
   const llmCallLogs = new LlmCallLogRepository(database.db);
   const durableJobs = new DurableJobRepository(database.db);
   const projectBundles = new ProjectBundleRepository(database.db);
   const workflowRuns = new WorkflowRunRepository(database.db);
   const promptVersions = new PromptVersionRepository(database.db);
   const settings = new SettingsRepository(database.db);
-  const search = new SearchRepository(database.client);
   const memory = new MemoryRepository(database.db);
   const versionHistory = new VersionHistoryRepository(database.db);
   const migrationHistory = new MigrationHistoryRepository(database.db);
@@ -221,6 +221,7 @@ export async function createPersistentApiRuntime(
     root: resolveBackupRoot(filename),
     projects: projectRepository,
     artifacts,
+    artifactContent,
     manuscripts,
     agentRuns,
     settings,
@@ -329,6 +330,7 @@ function createPersistentBackupDependencies(input: {
   root: string;
   projects: ProjectRepository;
   artifacts: ArtifactRepository;
+  artifactContent: ArtifactStore;
   manuscripts: ManuscriptRepository;
   agentRuns: AgentRunRepository;
   settings: SettingsRepository;
@@ -357,6 +359,14 @@ function createPersistentBackupDependencies(input: {
         );
         const allArtifacts = await input.artifacts.list({ limit: 1000 });
         const artifacts = allArtifacts.filter((artifact) => artifactIds.has(artifact.id));
+        const artifactContents = await Promise.all(
+          artifacts.map(async (artifact) => ({
+            artifactId: artifact.id,
+            uri: artifact.uri,
+            hash: artifact.hash,
+            text: await input.artifactContent.readText(artifact.uri)
+          }))
+        );
         const runIds = new Set(
           artifacts.flatMap((artifact) => (artifact.relatedRunId ? [artifact.relatedRunId] : []))
         );
@@ -365,6 +375,7 @@ function createPersistentBackupDependencies(input: {
           project,
           manuscripts: manuscript ? [{ ...manuscript, chapters }] : [],
           artifacts,
+          artifactContents,
           canon: [],
           knowledge: [],
           sourcePolicies: [],
@@ -399,7 +410,7 @@ function createPersistentBackupDependencies(input: {
       },
       async restoreProject(targetProjectId, payload) {
         await input.projects.save(projectFromBackupPayload(targetProjectId, payload));
-        await restoreArtifactsFromBackup(input.artifacts, payload);
+        await restoreArtifactsFromBackup(input.artifacts, input.artifactContent, payload);
         await restoreManuscriptsFromBackup(input.manuscripts, targetProjectId, payload);
       },
       async saveRestoreRecord(record) {
@@ -557,11 +568,35 @@ function projectFromBackupPayload(targetProjectId: string, payload: unknown): Pr
   };
 }
 
-async function restoreArtifactsFromBackup(artifacts: ArtifactRepository, payload: unknown): Promise<void> {
-  const snapshot = payload as { artifacts?: unknown[] };
+async function restoreArtifactsFromBackup(
+  artifacts: ArtifactRepository,
+  artifactContent: ArtifactStore,
+  payload: unknown
+): Promise<void> {
+  const snapshot = payload as { artifacts?: unknown[]; artifactContents?: unknown[] };
+  const contents = new Map(
+    (snapshot.artifactContents ?? [])
+      .filter(isArtifactContentSnapshot)
+      .map((content) => [content.artifactId, content])
+  );
+
   for (const candidate of snapshot.artifacts ?? []) {
     if (!isArtifactSnapshot(candidate) || (await artifacts.findById(candidate.id))) continue;
-    await artifacts.save(candidate);
+    const content = contents.get(candidate.id);
+    if (!content) {
+      await artifacts.save(candidate);
+      continue;
+    }
+
+    const restored = await artifactContent.writeText(basename(candidate.uri), content.text);
+    if (restored.hash !== content.hash || restored.hash !== candidate.hash) {
+      throw new Error(`Artifact content hash mismatch for ${candidate.id}`);
+    }
+    await artifacts.save({
+      ...candidate,
+      hash: restored.hash,
+      uri: restored.uri
+    });
   }
 }
 
@@ -632,6 +667,21 @@ function isArtifactSnapshot(value: unknown): value is Parameters<ArtifactReposit
     typeof value.hash === 'string' &&
     typeof value.uri === 'string' &&
     typeof value.createdAt === 'string'
+  );
+}
+
+function isArtifactContentSnapshot(value: unknown): value is {
+  artifactId: string;
+  uri: string;
+  hash: string;
+  text: string;
+} {
+  return (
+    isRecord(value) &&
+    typeof value.artifactId === 'string' &&
+    typeof value.uri === 'string' &&
+    typeof value.hash === 'string' &&
+    typeof value.text === 'string'
   );
 }
 
