@@ -52,7 +52,7 @@ export function App({ apiBaseUrl, fetchImpl }: AppProps = {}) {
       <ScheduledBackupPanel client={client} />
       <ImportExportBackupPanel client={client} projectId={selectedProjectId} />
       <SettingsPanel client={client} />
-      <DecisionQueuePanel />
+      <DecisionQueuePanel client={client} projectId={selectedProjectId} />
     </AppShell>
   );
 }
