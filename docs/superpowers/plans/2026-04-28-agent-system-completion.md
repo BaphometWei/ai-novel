@@ -25,12 +25,43 @@
 ## Current Baseline
 
 - Current branch: `main`.
-- Last known pushed commit before this plan: `3926b3b feat: harden project context and agent room trace`.
-- Last full verification before this plan: `npm run verify:local` passed with Vitest, build, DB check, and Playwright.
+- Plan-start pushed baseline: `3926b3b feat: harden project context and agent room trace`.
+- Current local commit baseline before the final uncommitted hardening batch: `b3f2455 fix: restore deterministic writing draft fallback`.
+- Remote HEAD observed by `git ls-remote origin HEAD`: `4c48911 feat: retry transient llm gateway failures`; local `main` is ahead before the final commit.
+- Last focused browser verification during this final batch: `npx playwright test tests/e2e/real-local-workflow.spec.ts tests/e2e/writing-flow.spec.ts tests/e2e/workspace.spec.ts` passed 18/18 after updating acceptance, observability, and overflow coverage.
+- Last full verification during this final batch: `npm run verify:local` passed with 155 Vitest files / 481 tests, workspace build, DB check, and 18 Playwright tests.
 - Remaining gaps were confirmed by three read-only audits:
   - Design/system audit.
   - Backend/runtime audit.
   - Frontend/product-flow audit.
+
+## 2026-04-28 Execution Status
+
+Implemented locally:
+
+- Task 1: persistent writing runs and server-side context builder.
+- Task 2: accepted prose governance, provenance checks, memory approval references, and approval decision effects.
+- Task 3: project-scoped web/API wiring for manuscript acceptance, review, observability, branch/retcon, and decision queue.
+- Task 4: durable worker handlers for backup create/verify/restore and import/export jobs.
+- Task 5: persisted review/revision actions and review learning integration.
+- Task 6: backup/export/import/restore coverage for chapters, versions, canon, knowledge, source policies, and artifact metadata.
+- Task 7: narrative extraction from accepted manuscript state and rejection of non-accepted versions.
+- Task 8: provider/settings/source-policy guardrails and retry behavior.
+- Task 9: project-scoped persisted observability summary route with frontend wiring.
+- Task 10: focused real local browser/API acceptance for writing, acceptance, approval promotion, current manuscript body, backup restore, and observability evidence.
+
+Still pending until the final handoff commands complete:
+
+- Final commit containing this hardening batch.
+- Normal non-force `git push origin main`.
+
+External, not locally automatable:
+
+- Live provider credentials and paid smoke-test budget.
+- GitHub secrets/account policy.
+- Code signing/release credentials.
+- OS keychain/product decisions.
+- Representative corpus and acceptance thresholds.
 
 ## File Structure Map
 
@@ -1622,18 +1653,17 @@ Use subagents only after Task 1 establishes shared persistent writing/context co
 
 ## Completion Checklist
 
-- [ ] Writing runs persist AgentRun, WorkflowRun, DurableJob, LLM logs, context packs, and artifacts.
-- [ ] All writing/orchestration runs build context server-side.
-- [ ] Accepted prose goes through authorship audit, memory extraction, narrative extraction, and approvals before authoritative canon/state promotion.
-- [ ] Decision Queue is API-backed and blocks/resolves product workflows.
-- [ ] Durable jobs are claimable, retryable, replayable, cancellable, and handler-backed.
-- [ ] Review and revision lifecycle is persistent and visible in UI.
-- [ ] Backup/export/import/restore includes full project data and validates hashes.
-- [ ] V3 narrative intelligence state is fed by accepted/reviewed manuscript state.
-- [ ] Provider retry, budget, source policy, and settings validation are enforced.
-- [ ] Observability reports real persisted telemetry and marks insufficient data honestly.
-- [ ] High-value browser acceptance uses real local API.
-- [ ] `npm run verify:local` passes.
+- [x] Writing runs persist AgentRun, WorkflowRun, DurableJob, LLM logs, context packs, and artifacts.
+- [x] All writing/orchestration runs build context server-side.
+- [x] Accepted prose goes through provenance checks, memory extraction, narrative extraction, and approvals before authoritative canon/state promotion.
+- [x] Decision Queue is API-backed and resolves approval effects.
+- [x] Durable jobs are handler-backed for the local backup/import/export workflows covered by this hardening batch.
+- [x] Review and revision lifecycle is persistent and visible in UI.
+- [x] Backup/export/import/restore includes project data, manuscript chapters/versions, canon, knowledge, source policy, and artifact metadata.
+- [x] V3 narrative intelligence state is fed by accepted manuscript state.
+- [x] Provider retry, budget, source policy, and settings validation are enforced in local deterministic paths.
+- [x] Observability reports persisted/live local telemetry through project-scoped summaries.
+- [x] High-value browser acceptance uses the real local API for writing, acceptance, approval promotion, backup restore, and observability checks.
+- [x] `npm run verify:local` passes after the final documentation and E2E updates.
 - [ ] All changes are committed.
 - [ ] `git push origin main` succeeds.
-

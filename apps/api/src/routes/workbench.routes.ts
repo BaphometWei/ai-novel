@@ -23,6 +23,7 @@ export interface WorkbenchProjectLookup {
 
 export interface WorkbenchReviewStore {
   saveReport(report: ReviewReport): Promise<void>;
+  listReportsByProject(projectId: string): Promise<ReviewReport[]>;
   findReportById(id: string): Promise<ReviewReport | null>;
   findReportContainingFinding(projectId: string, findingId: string): Promise<ReviewReport | null>;
   recordFindingAction?(input: {
@@ -209,6 +210,10 @@ class InMemoryReviewStore implements WorkbenchReviewStore {
     this.reports.set(report.id, report);
   }
 
+  async listReportsByProject(projectId: string): Promise<ReviewReport[]> {
+    return [...this.reports.values()].filter((report) => report.projectId === projectId);
+  }
+
   async findReportById(id: string): Promise<ReviewReport | null> {
     return this.reports.get(id) ?? null;
   }
@@ -390,6 +395,14 @@ export function registerWorkbenchRoutes(app: FastifyInstance, stores: WorkbenchR
     });
     await stores.review.saveReport(report);
     return reply.code(201).send(report);
+  });
+
+  app.get('/projects/:projectId/review/reports', async (request, reply) => {
+    const params = projectParamsSchema.safeParse(request.params);
+    if (!params.success) return invalidPayload(reply);
+    if (!(await findProjectOr404(stores, params.data.projectId, reply))) return reply;
+
+    return reply.send(await stores.review.listReportsByProject(params.data.projectId));
   });
 
   app.get('/projects/:projectId/review/reports/:id', async (request, reply) => {

@@ -16,9 +16,9 @@ This is a documentation status read, not a full code audit or product acceptance
 
 ## Current Read
 
-The repository has a broad implemented scaffold for both V2 production workflows and V3 intelligence/productization. The visible surface includes domain modules, persistence repositories, API routes, web panels, package-level tests, API tests, and e2e specs for most named V2/V3 areas.
+The repository now has implemented, locally test-shaped slices for the main V2 production workflows and V3 intelligence/productization surfaces. As of the 2026-04-28 agent-system completion work, persistent writing runs, server-side context building, approval gating, decision-queue effects, durable backup/import/export handlers, review actions, gateway retry behavior, narrative extraction, project-scoped observability, backup restore sections, and web/API wiring are present in local code and tests.
 
-That surface should not be treated as proof that V2 or V3 are production-complete. Many visible tests and plan snippets use fake providers, deterministic fixtures, mock clients, or mocked snapshots. That is appropriate for coverage and development, but it means the current evidence supports "implemented and test-shaped slices exist" more strongly than "real local product is complete under production conditions."
+That still should not be treated as live production acceptance. The verified local path intentionally uses fake providers, deterministic fixtures, injected fetch tests, local SQLite, and browser flows that avoid paid provider calls and real secrets. Final production evidence still depends on clean full verification, successful push, and the external operator inputs listed in `docs/operations/external-blockers.md`.
 
 ## Implemented Scaffold and Feature Slices
 
@@ -39,27 +39,40 @@ V3-visible areas:
 - Serialization intelligence exists across platform profiles, recommendations, serialization persistence, API/workbench surfaces, and UI tests.
 - Branch, retcon, regression automation, version history, semantic diff, observability, scheduled backup, migration history, and desktop-packaging feasibility are represented by files/tests/docs.
 
-## Not Production-Complete by Current Evidence
+## Local Completion Evidence
 
-The following remain productization gaps unless separately verified by a full acceptance run:
+Implemented locally:
 
-- Real-provider operation: fake providers and fake models remain common in runtime defaults and tests. Need explicit verification of configured OpenAI-compatible provider calls, streaming behavior, retry/repair metadata, budget enforcement, and secret redaction under real local settings.
-- End-to-end persistence fidelity: repositories and API tests are visible, but production readiness needs a full local DB lifecycle check across create, migrate, backup, restore, resume workflow, replay lineage, and cross-project isolation.
-- UI/API integration depth: many component tests use injected mock clients. Need browser-level verification against the real local API for all primary V2/V3 panels, not only isolated component contracts.
-- Durable workflow behavior: workflow and durable job tests exist, but production readiness needs interruption/resume/replay checks around writing, review, backup, import/export, and agent-room actions.
-- Narrative intelligence product usability: V3 engines are broadly present, but the product gap is proving inspectable state, approval routing, trace links, persistence, and author-facing explanations across realistic manuscript data.
-- Retrieval quality: vector store, reranking, compression, and regression surfaces exist. Productization still needs seeded corpus evaluation, thresholds, regression snapshots, and failure triage workflow that reflects real author projects.
-- Governance and safety hardening: source policy, similarity, authorship audit, and approval persistence are represented. Remaining work is proving enforcement at every generation/import/revision boundary, not only in standalone checks.
-- Observability readiness: dashboards, metrics, repositories, and API tests are visible. Need real run telemetry coverage for cost, latency, token, quality, reliability, context, adoption, workflow bottleneck, and migration/backup health signals.
-- Backup and migration readiness: backup, scheduled backup, migration, migration history, and restore tests exist. Need destructive-path restore rehearsal, backup-before-migration flow, artifact hash validation, and documented operator recovery steps.
-- Desktop packaging: current spike recommends keeping packaging feasibility-only during V3. Full Electron/Tauri implementation, updater behavior, OS keychain storage, managed API lifecycle, and packaged DB/artifact path handling remain beyond current V3 scope.
+- Persistent writing runs now persist AgentRun, WorkflowRun, DurableJob, LLM call logs, context packs, and artifact metadata.
+- Writing and orchestration routes build context server-side instead of trusting caller-supplied context sections.
+- Accepted manuscript text is gated through provenance checks, memory candidate extraction, approval references, and approval decision effects before promotion.
+- Durable runtime handlers cover backup create/verify/restore and import/export job execution.
+- Backup manifests include canon, knowledge, source policies, chapters, versions, and artifact metadata needed for local restore.
+- Narrative extraction rejects non-accepted manuscript versions and extracts promise, secret, arc, timeline, world rule, dependency, and closure state.
+- Observability exposes project-scoped summaries from persisted snapshots when available, with live fallback.
+- Frontend panels share selected project/client wiring for review, observability, manuscript acceptance, branch/retcon regression, and decision flows.
+
+Still needs final local evidence before a production-hardening handoff:
+
+- Fresh `npm run verify:local` after the last E2E and documentation updates.
+- Successful normal `git push origin main`, without force push.
+- Continued browser coverage against real local API for representative author workflows as the product scope expands.
+- Restore rehearsal depth for destructive recovery and cross-project isolation beyond deterministic local fixtures.
+- Representative corpus thresholds for retrieval, narrative quality, review learning, and acceptance gates.
+
+External blockers that remain out of local automation:
+
+- Live OpenAI-compatible provider credentials, model budget approval, and paid smoke-test policy.
+- CI repository secrets, account permissions, branch policy, and log redaction decisions.
+- Code signing certificates, release credentials, desktop packaging channel decisions, and OS keychain choices.
+- Product-owner decisions for source-policy defaults, validation corpus use, and quality thresholds.
 
 ## Suggested Completion Gates
 
 Before calling V2 production-complete:
 
 - Run unit/API/e2e/build/database checks from a clean install.
-- Verify real provider settings without exposing raw secrets.
+- Verify real provider settings without exposing raw secrets; this is blocked on operator credentials and budget approval.
 - Complete a browser-driven local workflow: create project, create chapter, generate draft, review, accept, extract memory, retrieve context, search, backup, restore, and inspect agent run trace.
 - Confirm manual recovery docs exist for DB/artifact/backup failures.
 
@@ -73,4 +86,4 @@ Before calling V3 product-complete:
 
 ## Bottom Line
 
-V2/V3 are substantially scaffolded and many feature slices are test-covered. The remaining gap is productization evidence: real-provider operation, full local persistence lifecycle, real API-backed browser verification, recovery paths, and traceable approval/observability behavior across realistic end-to-end author workflows.
+V2/V3 are no longer just scaffolded; the core local production-hardening slices are implemented and covered by deterministic tests. The remaining gap is final evidence and external readiness: clean full local verification, successful push transport, real-provider validation, representative corpus thresholds, and operator-owned release/secret/certificate decisions.

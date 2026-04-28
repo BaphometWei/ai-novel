@@ -3,9 +3,10 @@ import { createApiClient, type ObservabilityApiClient, type ProductObservability
 
 export interface ObservabilityDashboardProps {
   client?: ObservabilityApiClient;
+  projectId?: string;
 }
 
-export function ObservabilityDashboard({ client }: ObservabilityDashboardProps) {
+export function ObservabilityDashboard({ client, projectId }: ObservabilityDashboardProps) {
   const resolvedClient = useMemo(() => client ?? createApiClient(), [client]);
   const [summary, setSummary] = useState<ProductObservabilitySummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +17,7 @@ export function ObservabilityDashboard({ client }: ObservabilityDashboardProps) 
     async function loadSummary() {
       setError(null);
       try {
-        const loaded = await resolvedClient.loadObservabilitySummary();
+        const loaded = await resolvedClient.loadObservabilitySummary(projectId ? { projectId } : undefined);
         if (!cancelled) setSummary(loaded);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load observability summary');
@@ -28,7 +29,7 @@ export function ObservabilityDashboard({ client }: ObservabilityDashboardProps) 
     return () => {
       cancelled = true;
     };
-  }, [resolvedClient]);
+  }, [projectId, resolvedClient]);
 
   return (
     <section className="surface-panel" aria-labelledby="observability-title">

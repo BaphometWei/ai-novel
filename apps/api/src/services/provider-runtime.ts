@@ -17,19 +17,19 @@ export interface ProviderRuntimeOptions {
 }
 
 export interface ProviderRuntime {
-  createGateway(input: { promptVersionId: string }): LlmGateway;
+  createGateway(input: { promptVersionId: string }): Promise<LlmGateway>;
 }
 
 export async function createProviderRuntime(
   settings: SettingsRepository,
   options: ProviderRuntimeOptions = {}
 ): Promise<ProviderRuntime> {
-  const openAISettings = await settings.findProviderSettings('openai');
-  const openAIBudget = await settings.findBudgetPolicy('openai');
-  const gatewayOptions = createConfiguredGatewayOptions(openAISettings, openAIBudget, options);
-
   return {
-    createGateway({ promptVersionId }) {
+    async createGateway({ promptVersionId }) {
+      const openAISettings = await settings.findProviderSettings('openai');
+      const openAIBudget = await settings.findBudgetPolicy('openai');
+      const gatewayOptions = createConfiguredGatewayOptions(openAISettings, openAIBudget, options);
+
       return new LlmGateway({
         ...gatewayOptions,
         promptVersionId

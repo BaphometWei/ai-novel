@@ -36,12 +36,12 @@ export function App({ apiBaseUrl, fetchImpl }: AppProps = {}) {
   return (
     <AppShell>
       <ProjectDashboard client={client} onProjectLoaded={handleProjectLoaded} />
-      <ManuscriptEditor client={client} />
+      <ManuscriptEditor client={client} projectId={selectedProjectId} />
       <StoryBible />
-      <ReviewCenter />
+      <ReviewCenter client={client} projectId={selectedProjectId} />
       <SerializationDesk />
       <KnowledgeLibrary />
-      <ObservabilityDashboard client={client} />
+      <ObservabilityDashboard client={client} projectId={selectedProjectId} />
       <AgentRoom client={client} />
       <VersionHistoryPanel client={client} projectId={selectedProjectId} />
       <ReviewLearningPanel client={client} />

@@ -33,6 +33,11 @@ export class ReviewRepository {
     });
   }
 
+  async listReportsByProject(projectId: string): Promise<ReviewReport[]> {
+    const rows = await this.db.select().from(reviewReports).where(eq(reviewReports.projectId, projectId)).all();
+    return rows.map(toReviewReport);
+  }
+
   async findReportById(id: string): Promise<ReviewReport | null> {
     const row = await this.db.select().from(reviewReports).where(eq(reviewReports.id, id)).get();
     if (!row) return null;

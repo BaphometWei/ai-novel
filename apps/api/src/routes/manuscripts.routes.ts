@@ -183,6 +183,9 @@ export function registerManuscriptRoutes(
         if (error instanceof Error && /chapter/i.test(error.message)) {
           return reply.code(404).send({ error: 'Chapter not found' });
         }
+        if (error instanceof Error && /provenance/i.test(error.message)) {
+          return reply.code(409).send({ error: 'Draft provenance mismatch' });
+        }
         throw error;
       }
     });

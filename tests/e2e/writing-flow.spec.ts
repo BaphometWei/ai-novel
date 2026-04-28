@@ -69,11 +69,12 @@ test('API-backed manuscript writing flow creates a chapter, generates a draft, a
     expect(route.request().method()).toBe('POST');
     writingRunRequest = await route.request().postDataJSON();
     await fulfillJson(route, {
-      id: 'writing_run_e2e',
+      id: 'agent_run_e2e',
       status: 'AwaitingAcceptance',
       manuscriptVersionId: null,
       draftArtifact: {
-        id: 'draft_artifact_e2e',
+        id: 'workflow_draft_e2e',
+        artifactRecordId: 'artifact_draft_e2e',
         type: 'draft_prose',
         status: 'Draft',
         text: 'Mira followed the bell-sparks through the flooded archive.',
@@ -103,17 +104,20 @@ test('API-backed manuscript writing flow creates a chapter, generates a draft, a
       }
     });
   });
-  await page.route('**/chapters/chapter_e2e_created/versions', async (route) => {
+  await page.route('**/chapters/chapter_e2e_created/accept-draft', async (route) => {
     expect(route.request().method()).toBe('POST');
     acceptedVersionRequest = await route.request().postDataJSON();
     await fulfillJson(
       route,
       {
-        id: 'version_e2e_accepted',
+        status: 'Accepted',
+        projectId: 'project_e2e_writing',
         chapterId: 'chapter_e2e_created',
-        versionNumber: 2,
-        bodyArtifactId: 'artifact_e2e_accepted',
-        status: 'Accepted'
+        versionId: 'version_e2e_accepted',
+        sourceRunId: 'agent_run_e2e',
+        draftArtifactId: 'artifact_draft_e2e',
+        approvals: [],
+        candidates: []
       },
       201
     );
@@ -168,13 +172,10 @@ test('API-backed manuscript writing flow creates a chapter, generates a draft, a
 
   await expect(page.getByText('Accepted as version_e2e_accepted.')).toBeVisible();
   expect(acceptedVersionRequest).toEqual({
+    runId: 'agent_run_e2e',
+    draftArtifactId: 'artifact_draft_e2e',
     body: 'Mira revised the bell-sparks clue before accepting the chapter.',
-    status: 'Accepted',
-    makeCurrent: true,
-    metadata: {
-      acceptedFromRunId: 'writing_run_e2e',
-      draftArtifactId: 'draft_artifact_e2e'
-    }
+    acceptedBy: 'operator'
   });
 });
 

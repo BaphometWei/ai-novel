@@ -160,6 +160,9 @@ export function registerNarrativeIntelligenceRoutes(
       parsed.data.manuscriptVersionId
     );
     if (!version) return reply.code(404).send({ error: 'Manuscript version not found' });
+    if (version.status !== 'Accepted') {
+      return reply.code(409).send({ error: 'Narrative extraction requires an accepted manuscript version' });
+    }
 
     const records = createNarrativeRecords({
       projectId: params.data.projectId,
@@ -348,6 +351,18 @@ function createNarrativeRecords(input: {
     narrativeRecord(input, 'promise', promise?.id ?? `reader_promise_${input.manuscriptVersionId}`, promise, metadata),
     narrativeRecord(
       input,
+      'secret',
+      `secret_${input.manuscriptVersionId}`,
+      {
+        manuscriptVersionId: input.manuscriptVersionId,
+        chapterId: input.chapterId,
+        hiddenQuestion: promise?.hiddenQuestion ?? `What does ${title} imply?`,
+        status: 'Candidate'
+      },
+      metadata
+    ),
+    narrativeRecord(
+      input,
       'arc',
       `arc_${input.manuscriptVersionId}`,
       {
@@ -363,7 +378,7 @@ function createNarrativeRecords(input: {
     ),
     narrativeRecord(
       input,
-      'timeline_event',
+      'timeline',
       `timeline_${input.manuscriptVersionId}`,
       { manuscriptVersionId: input.manuscriptVersionId, chapterId: input.chapterId, summary: title },
       metadata
@@ -377,7 +392,7 @@ function createNarrativeRecords(input: {
     ),
     narrativeRecord(
       input,
-      'dependency_finding',
+      'dependency',
       `dependency_${input.manuscriptVersionId}`,
       {
         source: { type: 'ManuscriptVersion', id: input.manuscriptVersionId },

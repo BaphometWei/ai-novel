@@ -5,6 +5,7 @@ import type {
   ChapterVersionRecord,
   ChapterWithVersions,
   CreateChapterWithVersionInput,
+  ResolveGovernedVersionInput,
   ManuscriptRecord
 } from '@ai-novel/db';
 import { createArtifactRecord, type ArtifactRecord, type EntityId, type Project } from '@ai-novel/domain';
@@ -19,6 +20,7 @@ export interface ManuscriptStore {
   findChapterById(chapterId: string): Promise<ChapterRecord | null>;
   createChapterWithVersion(input: CreateChapterWithVersionInput): Promise<{ chapter: ChapterWithVersions; version: ChapterVersionRecord } | { chapter: unknown; version: ChapterVersionRecord }>;
   addChapterVersion(input: AddChapterVersionInput): Promise<ChapterVersionRecord>;
+  resolveGovernedVersion?(input: ResolveGovernedVersionInput): Promise<ChapterVersionRecord | null>;
   listChapters(manuscriptId: string): Promise<ChapterWithVersions[]>;
 }
 
@@ -158,6 +160,14 @@ export class ManuscriptService {
       metadata: input.metadata,
       makeCurrent: input.makeCurrent
     });
+  }
+
+  async resolveGovernedVersion(input: ResolveGovernedVersionInput): Promise<ChapterVersionRecord | null> {
+    if (!this.manuscripts.resolveGovernedVersion) {
+      throw new Error('Governed manuscript version resolution is not configured');
+    }
+
+    return this.manuscripts.resolveGovernedVersion(input);
   }
 
   private async findOrCreateDefaultManuscript(project: Project): Promise<ManuscriptRecord> {

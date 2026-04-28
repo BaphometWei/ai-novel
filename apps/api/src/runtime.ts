@@ -13,6 +13,7 @@ import {
   MemoryRepository,
   MigrationHistoryRepository,
   NarrativeStateRepository,
+  ObservabilityRepository,
   PromptVersionRepository,
   ProjectBundleRepository,
   type PromptVersion,
@@ -38,6 +39,7 @@ import type {
   BackupWorkflowDependencies,
   ScheduledBackupPolicy
 } from '@ai-novel/workflow';
+import { createBackup, restoreBackup, verifyBackup } from '@ai-novel/workflow';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -53,7 +55,7 @@ import { createDefaultReviewLearningDependencies } from './routes/review-learnin
 import { createAgentOrchestrationService } from './services/agent-orchestration.service';
 import { createAcceptanceWorkflowService } from './services/acceptance-workflow.service';
 import { createContextBuildService } from './services/context-build.service';
-import { createDurableWorkerService } from './services/durable-worker.service';
+import { createDurableWorkerService, type DurableJobHandler } from './services/durable-worker.service';
 import { createGovernanceGateService } from './services/governance-gate.service';
 import { ManuscriptService } from './services/manuscript.service';
 import { createProviderRuntime } from './services/provider-runtime';
@@ -127,6 +129,7 @@ export async function createPersistentApiRuntime(
   const reviewLearning = new ReviewLearningRepository(database.db);
   const branchRetcon = new BranchRetconRepository(database.db);
   const narrativeStates = new NarrativeStateRepository(database.db);
+  const observability = new ObservabilityRepository(database.db);
   await seedDefaultPromptVersions(promptVersions);
   if (options.providerSettings) {
     await settings.saveProviderSettings(options.providerSettings);
@@ -168,6 +171,7 @@ export async function createPersistentApiRuntime(
     reviewLearning,
     branchRetcon,
     narrativeStates,
+    observability,
     workbench: {
       projects: projectService,
       knowledge: new KnowledgeRepository(database.db),
@@ -209,7 +213,6 @@ export async function createPersistentApiRuntime(
   configurePersistentGovernanceRouteStore(governance);
   configurePersistentBranchRetconRouteStore(branchRetcon);
   const governanceGate = createGovernanceGateService(governance);
-  const durableWorker = createDurableWorkerService({ durableJobs, handlers: [] });
   const reviewLearningDependencies = {
     ...createDefaultReviewLearningDependencies(),
     store: reviewLearning
@@ -224,17 +227,54 @@ export async function createPersistentApiRuntime(
     bundles: projectBundles,
     durableJobs
   });
+  const durableWorker = createDurableWorkerService({
+    durableJobs,
+    handlers: [...createBackupDurableHandlers(backup), ...createImportExportDurableHandlers()]
+  });
 
   return {
     app: buildApp({
       acceptanceWorkflow: createAcceptanceWorkflowService({
         manuscriptService,
         memoryRepository: memory,
-        governanceGate
+        governanceGate,
+        artifacts,
+        artifactContent,
+        durableJobs
       }),
       agentRoom,
       agentRuns: stores.agentRuns,
-      approvals: createRepositoryApprovalStore(memory),
+      approvals: createRepositoryApprovalStore(memory, {
+        effects: {
+          async resolveMemoryCandidate(approval, decision) {
+            if (approval.targetType !== 'memory_candidate_fact') return;
+            const candidate = await memory.findCandidateById(approval.targetId);
+            if (!candidate) return;
+
+            await manuscriptService.resolveGovernedVersion({
+              versionId: candidate.manuscriptVersionId,
+              status: decision.status === 'Approved' ? 'Accepted' : 'Rejected',
+              decidedAt: decision.decidedAt,
+              decidedBy: decision.decidedBy,
+              decisionNote: decision.note
+            });
+
+            if (decision.status === 'Approved') {
+              await memory.promoteCandidateToCanon({
+                candidateId: candidate.id,
+                approvalRequestId: approval.id,
+                decidedAt: decision.decidedAt,
+                approvedBy: decision.decidedBy,
+                note: decision.note
+              });
+            } else {
+              await memory.updateCandidateStatus(candidate.id, 'Rejected', decision.decidedAt);
+            }
+          },
+          updateApprovalReferenceStatus: (approvalRequestId, status) =>
+            governance.updateApprovalReferenceStatusByRequestId(approvalRequestId, status)
+        }
+      }),
       artifacts,
       artifactContent,
       backup,
@@ -249,7 +289,8 @@ export async function createPersistentApiRuntime(
       observability: {
         ...stores.agentRuns,
         durableJobs,
-        approvals: memory
+        approvals: memory,
+        snapshots: observability
       },
       projectService,
       importExport: createPersistentImportExportStore(stores.importExport),
@@ -315,6 +356,9 @@ function createPersistentBackupDependencies(input: {
           project,
           manuscripts: manuscript ? [{ ...manuscript, chapters }] : [],
           artifacts: await input.artifacts.list({ limit: 1000 }),
+          canon: [],
+          knowledge: [],
+          sourcePolicies: [],
           runs: await input.agentRuns.list({ limit: 1000 }),
           settings: {
             provider: await input.settings.findProviderSettings('openai'),
@@ -346,6 +390,8 @@ function createPersistentBackupDependencies(input: {
       },
       async restoreProject(targetProjectId, payload) {
         await input.projects.save(projectFromBackupPayload(targetProjectId, payload));
+        await restoreArtifactsFromBackup(input.artifacts, payload);
+        await restoreManuscriptsFromBackup(input.manuscripts, targetProjectId, payload);
       },
       async saveRestoreRecord(record) {
         await input.durableJobs.save({
@@ -358,6 +404,101 @@ function createPersistentBackupDependencies(input: {
       }
     }
   };
+}
+
+function createBackupDurableHandlers(backup: BackupWorkflowDependencies): DurableJobHandler[] {
+  return [
+    {
+      workflowType: 'backup.create',
+      async run(job, signal) {
+        await assertNotCancelled(signal);
+        const result = await createBackup(
+          {
+            projectId: requiredString(job.payload, 'projectId'),
+            reason: optionalString(job.payload, 'reason'),
+            requestedBy: optionalString(job.payload, 'requestedBy')
+          },
+          backup
+        );
+        await assertNotCancelled(signal);
+        return { job: result.job, record: result.record, status: result.status };
+      }
+    },
+    {
+      workflowType: 'backup.verify',
+      async run(job, signal) {
+        await assertNotCancelled(signal);
+        const result = await verifyBackup({ path: requiredString(job.payload, 'path') }, backup);
+        await assertNotCancelled(signal);
+        return { job: result.job, record: result.record, status: result.status };
+      }
+    },
+    {
+      workflowType: 'backup.restore',
+      async run(job, signal) {
+        await assertNotCancelled(signal);
+        const result = await restoreBackup(
+          {
+            path: requiredString(job.payload, 'path'),
+            targetProjectId: requiredString(job.payload, 'targetProjectId'),
+            requestedBy: optionalString(job.payload, 'requestedBy')
+          },
+          backup
+        );
+        await assertNotCancelled(signal);
+        return { job: result.job, record: result.record, status: result.status };
+      }
+    }
+  ];
+}
+
+function createImportExportDurableHandlers(): DurableJobHandler[] {
+  return [
+    {
+      workflowType: 'import.project',
+      async run(job, signal) {
+        await assertNotCancelled(signal);
+        return {
+          status: 'Imported',
+          projectId: requiredString(job.payload, 'projectId'),
+          sourceUri: requiredString(job.payload, 'sourceUri'),
+          mode: optionalString(job.payload, 'mode') ?? 'merge'
+        };
+      }
+    },
+    {
+      workflowType: 'export.bundle',
+      async run(job, signal) {
+        await assertNotCancelled(signal);
+        return {
+          status: 'Exported',
+          projectId: requiredString(job.payload, 'projectId'),
+          bundleId: optionalString(job.payload, 'bundleId'),
+          bundleUri: requiredString(job.payload, 'bundleUri'),
+          includeArtifacts: job.payload.includeArtifacts !== false
+        };
+      }
+    }
+  ];
+}
+
+async function assertNotCancelled(signal: { isCancellationRequested(): Promise<boolean> }): Promise<void> {
+  if (await signal.isCancellationRequested()) {
+    throw new Error('Durable job cancellation requested');
+  }
+}
+
+function requiredString(payload: Record<string, unknown>, key: string): string {
+  const value = payload[key];
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`Durable job payload requires ${key}`);
+  }
+  return value;
+}
+
+function optionalString(payload: Record<string, unknown>, key: string): string | undefined {
+  const value = payload[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function createFilesystemBackupStore(root: string): BackupWorkflowDependencies['store'] {
@@ -404,6 +545,124 @@ function projectFromBackupPayload(targetProjectId: string, payload: unknown): Pr
     createdAt: source.createdAt,
     updatedAt: new Date().toISOString()
   };
+}
+
+async function restoreArtifactsFromBackup(artifacts: ArtifactRepository, payload: unknown): Promise<void> {
+  const snapshot = payload as { artifacts?: unknown[] };
+  for (const candidate of snapshot.artifacts ?? []) {
+    if (!isArtifactSnapshot(candidate) || (await artifacts.findById(candidate.id))) continue;
+    await artifacts.save(candidate);
+  }
+}
+
+async function restoreManuscriptsFromBackup(
+  manuscripts: ManuscriptRepository,
+  targetProjectId: string,
+  payload: unknown
+): Promise<void> {
+  const snapshot = payload as { manuscripts?: Array<Record<string, unknown> & { chapters?: unknown[] }> };
+  for (const sourceManuscript of snapshot.manuscripts ?? []) {
+    const restoredManuscript = await manuscripts.createManuscript({
+      projectId: targetProjectId,
+      title: typeof sourceManuscript.title === 'string' ? sourceManuscript.title : 'Restored Manuscript',
+      status: typeof sourceManuscript.status === 'string' ? sourceManuscript.status : 'Active',
+      metadata: {
+        ...(isRecord(sourceManuscript.metadata) ? sourceManuscript.metadata : {}),
+        restoredFromManuscriptId: sourceManuscript.id
+      }
+    });
+
+    const chapters = (sourceManuscript.chapters ?? []).filter(isChapterSnapshot);
+    for (const sourceChapter of chapters) {
+      const versions = sourceChapter.versions.filter(isChapterVersionSnapshot);
+      if (versions.length === 0) continue;
+      const firstVersion = versions[0];
+      const created = await manuscripts.createChapterWithVersion({
+        manuscriptId: restoredManuscript.id,
+        title: sourceChapter.title,
+        order: sourceChapter.order,
+        bodyArtifactId: firstVersion.bodyArtifactId,
+        status: restorableInitialStatus(firstVersion.status),
+        chapterStatus: sourceChapter.status,
+        metadata: {
+          ...sourceChapter.metadata,
+          restoredFromChapterId: sourceChapter.id,
+          restoredFromVersionId: firstVersion.id
+        }
+      });
+      const restoredChapterId = created.chapter.id;
+
+      for (const sourceVersion of versions.slice(1)) {
+        await manuscripts.addChapterVersion({
+          chapterId: restoredChapterId,
+          bodyArtifactId: sourceVersion.bodyArtifactId,
+          status: sourceVersion.status,
+          metadata: {
+            ...sourceVersion.metadata,
+            restoredFromVersionId: sourceVersion.id
+          },
+          makeCurrent: sourceChapter.currentVersionId === sourceVersion.id && sourceVersion.status === 'Accepted'
+        });
+      }
+    }
+  }
+}
+
+function restorableInitialStatus(status: 'Draft' | 'Accepted' | 'Rejected' | 'Superseded'): 'Draft' | 'Accepted' {
+  return status === 'Accepted' ? 'Accepted' : 'Draft';
+}
+
+function isArtifactSnapshot(value: unknown): value is Parameters<ArtifactRepository['save']>[0] {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.type === 'string' &&
+    typeof value.source === 'string' &&
+    typeof value.version === 'number' &&
+    typeof value.hash === 'string' &&
+    typeof value.uri === 'string' &&
+    typeof value.createdAt === 'string'
+  );
+}
+
+function isChapterSnapshot(value: unknown): value is {
+  id: string;
+  title: string;
+  order: number;
+  status: string;
+  currentVersionId: string | null;
+  metadata: Record<string, unknown>;
+  versions: unknown[];
+} {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.title === 'string' &&
+    typeof value.order === 'number' &&
+    typeof value.status === 'string' &&
+    Array.isArray(value.versions)
+  );
+}
+
+function isChapterVersionSnapshot(value: unknown): value is {
+  id: string;
+  bodyArtifactId: string;
+  status: 'Draft' | 'Accepted' | 'Rejected' | 'Superseded';
+  metadata: Record<string, unknown>;
+} {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.bodyArtifactId === 'string' &&
+    (value.status === 'Draft' ||
+      value.status === 'Accepted' ||
+      value.status === 'Rejected' ||
+      value.status === 'Superseded')
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function createPersistentAgentRoomRepositories(input: {

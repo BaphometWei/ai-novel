@@ -1,6 +1,7 @@
 import { createDatabase, DurableJobRepository, migrateDatabase, WorkflowRunRepository } from '@ai-novel/db';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../app';
+import { createPersistentApiRuntime } from '../runtime';
 
 describe('workflow API routes', () => {
   it('creates workflow runs and resumes them through persisted repositories', async () => {
@@ -94,6 +95,52 @@ describe('workflow API routes', () => {
     expect(replay).toMatchObject({ status: 'Queued', replayOfJobId: job.id });
     expect(lineageResponse.json()).toEqual({ jobIds: [job.id, replay.id] });
     database.client.close();
+  });
+
+  it('executes backup durable jobs through the persistent runtime worker', async () => {
+    const runtime = await createPersistentApiRuntime(':memory:');
+    try {
+      const projectResponse = await runtime.app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: {
+          title: 'Worker Backup Project',
+          language: 'en-US',
+          targetAudience: 'serial fiction readers'
+        }
+      });
+      const project = projectResponse.json();
+
+      const createJobResponse = await runtime.app.inject({
+        method: 'POST',
+        url: '/workflow/jobs',
+        payload: {
+          workflowType: 'backup.create',
+          payload: { projectId: project.id, reason: 'worker-test', requestedBy: 'test' }
+        }
+      });
+      const job = createJobResponse.json();
+
+      const runResponse = await runtime.app.inject({ method: 'POST', url: '/workflow/worker/run-once' });
+      const jobResponse = await runtime.app.inject({ method: 'GET', url: `/workflow/jobs/${job.id}` });
+
+      expect(createJobResponse.statusCode).toBe(201);
+      expect(runResponse.json()).toEqual({ claimed: 1, completed: 1, failed: 0 });
+      expect(jobResponse.json()).toMatchObject({
+        id: job.id,
+        workflowType: 'backup.create',
+        status: 'Succeeded',
+        payload: {
+          output: {
+            record: { projectId: project.id },
+            status: { ok: true, stage: 'created' }
+          }
+        }
+      });
+    } finally {
+      await runtime.app.close();
+      runtime.database.client.close();
+    }
   });
 
   it('rejects workflow runs for invalid project ids', async () => {

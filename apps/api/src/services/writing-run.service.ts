@@ -135,7 +135,7 @@ class RepositoryWritingRunService implements PersistentWritingRunService {
       await this.dependencies.contextPacks.save(contextPack);
       await this.dependencies.agentRuns.save({ ...agentRun, status: 'Running' });
 
-      const gateway = this.dependencies.providerRuntime.createGateway({ promptVersionId });
+      const gateway = await this.dependencies.providerRuntime.createGateway({ promptVersionId });
       const result = await runWritingWorkflow(input, {
         provider: gateway,
         buildContext: () => contextPack as ContextPack,

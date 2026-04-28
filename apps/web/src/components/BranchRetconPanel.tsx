@@ -62,6 +62,8 @@ export function BranchRetconPanel({ client, projectId }: BranchRetconPanelProps)
           resolvedClient.createRetconProposal(retconInput)
         ]);
         const regression = await resolvedClient.runRetconRegressionChecks({
+          projectId: activeProjectId,
+          proposalId: proposal.proposal.id ?? '',
           checks: proposal.proposal.regressionChecks ?? []
         });
         const [scenarios, proposals] = await Promise.all([

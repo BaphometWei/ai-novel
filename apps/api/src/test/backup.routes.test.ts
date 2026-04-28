@@ -94,6 +94,17 @@ describe('backup API routes', () => {
         }
       });
       const project = projectResponse.json();
+      const chapterResponse = await runtime.app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/chapters`,
+        payload: {
+          title: 'Restorable Chapter',
+          order: 1,
+          body: 'The restored chapter keeps its body.',
+          status: 'Accepted'
+        }
+      });
+      expect(chapterResponse.statusCode).toBe(201);
 
       const backupResponse = await runtime.app.inject({
         method: 'POST',
@@ -105,7 +116,7 @@ describe('backup API routes', () => {
       const backup = backupResponse.json();
       expect(backup.record.path).not.toMatch(/^memory:\/\//);
       expect(backup.record.manifest.sections).toEqual(
-        expect.arrayContaining(['project', 'manuscripts', 'artifacts', 'runs', 'settings'])
+        expect.arrayContaining(['project', 'manuscripts', 'artifacts', 'canon', 'knowledge', 'runs', 'settings'])
       );
 
       const verifyResponse = await runtime.app.inject({
@@ -126,6 +137,10 @@ describe('backup API routes', () => {
         payload: { path: backup.record.path, targetProjectId: 'project_restored', requestedBy: 'operator' }
       });
       const restoredProjectResponse = await runtime.app.inject({ method: 'GET', url: '/projects/project_restored' });
+      const restoredChaptersResponse = await runtime.app.inject({
+        method: 'GET',
+        url: '/projects/project_restored/chapters'
+      });
 
       expect(restoreResponse.statusCode).toBe(200);
       expect(restoreResponse.json()).toMatchObject({
@@ -134,6 +149,19 @@ describe('backup API routes', () => {
       });
       expect(restoredProjectResponse.statusCode).toBe(200);
       expect(restoredProjectResponse.json()).toMatchObject({ id: 'project_restored', title: 'Persistent Archive' });
+      expect(restoredChaptersResponse.statusCode).toBe(200);
+      expect(restoredChaptersResponse.json()).toEqual([
+        expect.objectContaining({
+          title: 'Restorable Chapter',
+          currentVersionId: expect.stringMatching(/^manuscript_version_/),
+          versions: [
+            expect.objectContaining({
+              status: 'Accepted',
+              bodyArtifactId: chapterResponse.json().version.bodyArtifactId
+            })
+          ]
+        })
+      ]);
     } finally {
       await runtime.app.close();
       runtime.database.client.close();

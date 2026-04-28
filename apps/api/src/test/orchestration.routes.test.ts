@@ -54,7 +54,8 @@ describe('persistent agent orchestration routes', () => {
         taskGoal: 'Plan the next siege chapter',
         agentRole: 'Planner',
         riskLevel: 'Medium',
-        sections: [{ name: 'canon', content: 'The city is under siege.' }]
+        sections: [{ name: 'retrieved_context', content: '' }],
+        retrievalTrace: expect.arrayContaining(['query:Plan the next siege chapter'])
       },
       workflowRun: {
         steps: [
@@ -103,6 +104,7 @@ describe('persistent agent orchestration routes', () => {
     await expect(runtime.stores.artifactContent.readText(artifactResponse.json().uri)).resolves.toContain(
       '"taskGoal":"Plan the next siege chapter"'
     );
+    expect(JSON.stringify(created.contextPack.sections)).not.toContain('The city is under siege.');
 
     await runtime.app.close();
     runtime.database.client.close();

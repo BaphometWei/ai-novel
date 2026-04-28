@@ -17,15 +17,17 @@ const demoDraft = 'The siege bell sounded under the archive city.';
 
 export interface ManuscriptEditorProps {
   client?: Pick<ApiClient, 'listProjects' | 'listProjectChapters' | 'getChapterCurrentBody'> & WritingManuscriptApiClient;
+  projectId?: string;
 }
 
-export function ManuscriptEditor({ client }: ManuscriptEditorProps) {
-  const [projectId, setProjectId] = useState<string>('');
+export function ManuscriptEditor({ client, projectId: selectedProjectId }: ManuscriptEditorProps) {
+  const [projectId, setProjectId] = useState<string>(selectedProjectId ?? '');
   const [chapters, setChapters] = useState<ChapterSummary[]>(client ? [] : demoChapters);
   const [selectedChapterId, setSelectedChapterId] = useState(client ? '' : 'chapter_12');
   const [run, setRun] = useState<WritingRunResult | null>(null);
   const [status, setStatus] = useState(client ? 'Loading chapters...' : 'Drafting');
   const [acceptedVersionId, setAcceptedVersionId] = useState('');
+  const [approvalReasons, setApprovalReasons] = useState<string[]>([]);
   const [draftText, setDraftText] = useState(demoDraft);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,16 +38,15 @@ export function ManuscriptEditor({ client }: ManuscriptEditorProps) {
 
     async function loadChapters() {
       try {
-        const projects = await resolvedClient.listProjects();
-        const currentProject = projects[0];
-        if (!currentProject) {
+        const currentProjectId = selectedProjectId || (await resolvedClient.listProjects())[0]?.id;
+        if (!currentProjectId) {
           if (mounted) setStatus('No project available.');
           return;
         }
 
-        const loadedChapters = await resolvedClient.listProjectChapters(currentProject.id);
+        const loadedChapters = await resolvedClient.listProjectChapters(currentProjectId);
         if (!mounted) return;
-        setProjectId(currentProject.id);
+        setProjectId(currentProjectId);
         setChapters(loadedChapters);
         setSelectedChapterId(loadedChapters[0]?.id ?? '');
         setDraftText(demoDraft);
@@ -62,7 +63,7 @@ export function ManuscriptEditor({ client }: ManuscriptEditorProps) {
     return () => {
       mounted = false;
     };
-  }, [client]);
+  }, [client, selectedProjectId]);
 
   const selectedChapter = useMemo(
     () => chapters.find((chapter) => chapter.id === selectedChapterId) ?? chapters[0],
@@ -112,6 +113,7 @@ export function ManuscriptEditor({ client }: ManuscriptEditorProps) {
       setRun(null);
       setDraftText('New chapter draft.');
       setAcceptedVersionId('');
+      setApprovalReasons([]);
       setStatus('Ready');
     } catch (caught) {
       setError(errorMessage(caught, 'Unable to create chapter.'));
@@ -124,6 +126,7 @@ export function ManuscriptEditor({ client }: ManuscriptEditorProps) {
     setStatus('Generating draft...');
     setError(null);
     setAcceptedVersionId('');
+    setApprovalReasons([]);
     const manuscriptId = selectedChapter.manuscriptId ?? 'manuscript_default';
     try {
       const result = await client.startWritingRun(projectId, {
@@ -160,17 +163,15 @@ export function ManuscriptEditor({ client }: ManuscriptEditorProps) {
     setStatus('Accepting draft...');
     setError(null);
     try {
-      const version = await client.addChapterVersion(selectedChapter.id, {
+      const result = await client.acceptDraft(selectedChapter.id, {
+        runId: run.id,
+        draftArtifactId: run.draftArtifact.artifactRecordId ?? run.draftArtifact.id,
         body: draftText,
-        status: 'Accepted',
-        makeCurrent: true,
-        metadata: {
-          acceptedFromRunId: run.id,
-          draftArtifactId: run.draftArtifact.id
-        }
+        acceptedBy: 'operator'
       });
-      setAcceptedVersionId(version.id);
-      setStatus('Accepted');
+      setAcceptedVersionId(result.versionId);
+      setApprovalReasons(result.approvals.map((approval) => approval.reason).filter(Boolean));
+      setStatus(result.status);
     } catch (caught) {
       setError(errorMessage(caught, 'Unable to accept draft.'));
       setStatus(run.status || 'Ready');
@@ -206,6 +207,7 @@ export function ManuscriptEditor({ client }: ManuscriptEditorProps) {
                 setRun(null);
                 setDraftText(demoDraft);
                 setAcceptedVersionId('');
+                setApprovalReasons([]);
                 setError(null);
               }}
               role="treeitem"
@@ -237,7 +239,12 @@ export function ManuscriptEditor({ client }: ManuscriptEditorProps) {
           >
             {draftText}
           </div>
-          {acceptedVersionId ? <p>Accepted as {acceptedVersionId}.</p> : null}
+          {acceptedVersionId ? (
+            <p>{approvalReasons.length > 0 ? `Pending approval for ${acceptedVersionId}.` : `Accepted as ${acceptedVersionId}.`}</p>
+          ) : null}
+          {approvalReasons.map((reason) => (
+            <p key={reason}>{reason}</p>
+          ))}
           <dl className="compact-list context-inspector">
             <div>
               <dt>Context inspector</dt>

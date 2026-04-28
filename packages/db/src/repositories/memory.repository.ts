@@ -1,4 +1,4 @@
-import type { ApprovalRequest, CanonFact } from '@ai-novel/domain';
+import { createCanonFact, type ApprovalRequest, type CanonFact } from '@ai-novel/domain';
 import type { MemoryApprovalRequest, MemoryCandidateFact } from '@ai-novel/workflow';
 import { eq } from 'drizzle-orm';
 import type { AppDatabase } from '../connection';
@@ -77,6 +77,53 @@ export class MemoryRepository {
     return toMemoryCandidate(row);
   }
 
+  async updateCandidateStatus(
+    id: string,
+    status: MemoryCandidateFact['status'],
+    updatedAt = new Date().toISOString()
+  ): Promise<(MemoryCandidateFact & { approvalRequestId?: string }) | null> {
+    const existing = await this.findCandidateById(id);
+    if (!existing) return null;
+
+    await this.db.update(memoryCandidateFacts).set({ status, updatedAt }).where(eq(memoryCandidateFacts.id, id));
+    return this.findCandidateById(id);
+  }
+
+  async promoteCandidateToCanon(input: {
+    candidateId: string;
+    approvedBy?: string;
+    approvalRequestId: string;
+    decidedAt: string;
+    note?: string;
+  }): Promise<CanonFact | null> {
+    const candidate = await this.findCandidateById(input.candidateId);
+    if (!candidate) return null;
+
+    const fact = createCanonFact({
+      projectId: candidate.projectId as CanonFact['projectId'],
+      text: candidate.text,
+      status: 'Canon',
+      sourceReferences: [
+        {
+          sourceType: 'manuscript',
+          sourceId: candidate.manuscriptVersionId,
+          citation: candidate.evidence
+        }
+      ],
+      confirmationTrail: [
+        {
+          actor: 'user',
+          reason: input.note ?? `Approved memory candidate ${candidate.id}`,
+          confirmedAt: input.decidedAt
+        }
+      ]
+    });
+
+    await this.saveCanonFact(fact);
+    await this.updateCandidateStatus(candidate.id, 'Promoted', input.decidedAt);
+    return fact;
+  }
+
   async linkCandidateApproval(candidateId: string, approvalRequestId: string): Promise<void> {
     await this.db
       .update(memoryCandidateFacts)
@@ -114,6 +161,7 @@ export class MemoryRepository {
   async updateApprovalRequestStatus(id: string, status: ApprovalRequest['status']): Promise<ApprovalRequest | null> {
     const row = await this.db.select().from(approvalRequests).where(eq(approvalRequests.id, id)).get();
     if (!row) return null;
+    if (row.status !== 'Pending') return toApprovalRequest(row);
 
     await this.db.update(approvalRequests).set({ status }).where(eq(approvalRequests.id, id));
 

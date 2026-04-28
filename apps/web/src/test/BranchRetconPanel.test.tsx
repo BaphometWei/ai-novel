@@ -27,6 +27,11 @@ describe('BranchRetconPanel', () => {
     expect(within(retcon).getByText('Failed')).toBeInTheDocument();
     expect(within(retcon).getByText('timeline')).toBeInTheDocument();
     expect(within(retcon).getByText('timeline_event_2')).toBeInTheDocument();
+    expect(client.runRetconRegressionChecks).toHaveBeenCalledWith({
+      projectId: 'project_1',
+      proposalId: 'retcon_locked_door_origin',
+      checks: [{ scope: 'timeline', status: 'Failed', evidence: ['timeline_event_2'] }]
+    });
 
     const history = await screen.findByLabelText('Persisted branch retcon history');
     expect(client.listBranchScenarios).toHaveBeenCalledWith('project_1');

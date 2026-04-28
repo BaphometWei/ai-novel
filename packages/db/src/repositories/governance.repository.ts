@@ -78,6 +78,16 @@ export class GovernanceRepository {
       .onConflictDoUpdate({ target: governanceApprovalReferences.id, set: reference });
   }
 
+  async updateApprovalReferenceStatusByRequestId(
+    approvalRequestId: string,
+    status: ApprovalRequest['status']
+  ): Promise<void> {
+    await this.db
+      .update(governanceApprovalReferences)
+      .set({ status })
+      .where(eq(governanceApprovalReferences.approvalRequestId, approvalRequestId));
+  }
+
   async listApprovalReferencesByTarget(
     projectId: string,
     targetType: string,
@@ -112,7 +122,10 @@ export class GovernanceRepository {
         )
       )
     ).flat().filter((reference) => approvalReferenceIds.has(reference.id));
-    const uniqueById = new Map(references.map((reference) => [reference.id, reference]));
+    const directRows = (await this.db.select().from(governanceApprovalReferences).all()).filter((reference) =>
+      reference.id.endsWith(`:${agentRunId}`)
+    ) as GovernanceApprovalReference[];
+    const uniqueById = new Map([...references, ...directRows].map((reference) => [reference.id, reference]));
     return [...uniqueById.values()].sort((left, right) =>
       left.createdAt === right.createdAt ? left.id.localeCompare(right.id) : left.createdAt.localeCompare(right.createdAt)
     );

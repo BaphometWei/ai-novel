@@ -81,6 +81,7 @@ export interface WritingRunResult {
   manuscriptVersionId: string | null;
   draftArtifact: {
     id: string;
+    artifactRecordId?: string;
     type: string;
     status: string;
     text: string;
@@ -97,6 +98,31 @@ export interface WritingRunResult {
     };
   };
   contextPack: AgentRoomContextPack;
+}
+
+export interface AcceptDraftInput {
+  runId: string;
+  draftArtifactId: string;
+  body: string;
+  acceptedBy: string;
+}
+
+export interface AcceptDraftResult {
+  status: 'Accepted' | 'PendingApproval';
+  projectId: string;
+  chapterId: string;
+  versionId: string;
+  sourceRunId: string;
+  draftArtifactId: string;
+  approvals: Array<{
+    id: string;
+    targetType: string;
+    targetId: string;
+    status: string;
+    riskLevel: string;
+    reason: string;
+  }>;
+  candidates: unknown[];
 }
 
 export interface ProviderDefaults {
@@ -410,6 +436,38 @@ export interface ReviewFinding {
   status: ReviewFindingStatus;
 }
 
+export interface ReviewReport {
+  id: string;
+  projectId: string;
+  manuscriptVersionId: string;
+  profile: {
+    id: string;
+    name: string;
+    enabledCategories: string[];
+  };
+  findings: ReviewFinding[];
+  qualityScore: {
+    overall: number;
+    continuity: number;
+    promiseSatisfaction: number;
+    prose: number;
+  };
+  openFindingCount: number;
+}
+
+export type ReviewFindingActionKind = 'Accepted' | 'Rejected' | 'FalsePositive' | 'ApplyRevision' | 'ConvertToTask';
+
+export interface ReviewFindingActionResult {
+  findingId: string;
+  action: ReviewFindingActionKind;
+  previousStatus: ReviewFindingStatus;
+  nextStatus: ReviewFindingStatus;
+  decidedBy?: string;
+  reason?: string;
+  createdTaskId?: string;
+  occurredAt: string;
+}
+
 export interface RecurringIssueSummary {
   signature: string;
   category: string;
@@ -483,6 +541,7 @@ export interface ApiClient {
 export interface WritingManuscriptApiClient {
   createProjectChapter(projectId: string, input: CreateProjectChapterInput): Promise<CreateProjectChapterResult>;
   addChapterVersion(chapterId: string, input: AddChapterVersionInput): Promise<ChapterVersionSummary>;
+  acceptDraft(chapterId: string, input: AcceptDraftInput): Promise<AcceptDraftResult>;
   startWritingRun(projectId: string, input: WritingRunInput): Promise<WritingRunResult>;
 }
 
@@ -522,7 +581,7 @@ export interface AgentRoomApiClient {
 }
 
 export interface ObservabilityApiClient {
-  loadObservabilitySummary(): Promise<ProductObservabilitySummary>;
+  loadObservabilitySummary(input?: { projectId?: string }): Promise<ProductObservabilitySummary>;
 }
 
 export interface ApprovalItem {
@@ -569,6 +628,14 @@ export interface VersionHistoryApiClient {
 export interface ReviewLearningApiClient {
   summarizeRecurringIssues(input: RecurringIssueSummaryInput): Promise<RecurringIssueSummaryResult>;
   recheckRevisionReview(input: RevisionRecheckInput): Promise<RevisionRecheckResult>;
+}
+
+export interface ReviewApiClient {
+  listReviewReports(projectId: string): Promise<ReviewReport[]>;
+  recordReviewFindingAction(
+    findingId: string,
+    input: { projectId: string; action: ReviewFindingActionKind; decidedBy?: string; reason?: string }
+  ): Promise<ReviewFindingActionResult>;
 }
 
 export interface NarrativeIntelligenceApiClient {
@@ -821,6 +888,8 @@ export interface NarrativeRegressionCheck {
 }
 
 export interface RegressionRunInput {
+  projectId?: string;
+  proposalId?: string;
   checks: NarrativeRegressionCheck[];
 }
 
@@ -831,6 +900,7 @@ export interface RegressionRunResult {
 
 export interface RetconProposalResult {
   proposal: Record<string, unknown> & {
+    id?: string;
     title?: string;
     regressionChecks?: NarrativeRegressionCheck[];
   };
@@ -910,6 +980,7 @@ export function createApiClient(
   ApprovalsApiClient &
   ImportExportApiClient &
   VersionHistoryApiClient &
+  ReviewApiClient &
   ReviewLearningApiClient &
   NarrativeIntelligenceApiClient &
   GovernanceApiClient &
@@ -935,6 +1006,10 @@ export function createApiClient(
     addChapterVersion: async (chapterId, input) =>
       adaptChapterVersionResponse(
         await requestJson(fetchImpl, `${baseUrl}/chapters/${chapterId}/versions`, jsonRequest('POST', input))
+      ),
+    acceptDraft: async (chapterId, input) =>
+      adaptAcceptDraftResult(
+        await requestJson(fetchImpl, `${baseUrl}/chapters/${chapterId}/accept-draft`, jsonRequest('POST', input))
       ),
     startWritingRun: async (projectId, input) =>
       adaptWritingRunResult(
@@ -967,8 +1042,15 @@ export function createApiClient(
       adaptAgentRoomActionResult(
         await requestJson(fetchImpl, `${baseUrl}/agent-room/runs/${runId}/actions/${action}`, jsonRequest('POST', {}))
       ),
-    loadObservabilitySummary: async () =>
-      adaptProductObservabilitySummary(await requestJson(fetchImpl, `${baseUrl}/observability/summary`)),
+    loadObservabilitySummary: async (input) =>
+      adaptProductObservabilitySummary(
+        await requestJson(
+          fetchImpl,
+          input?.projectId
+            ? `${baseUrl}/projects/${input.projectId}/observability/summary`
+            : `${baseUrl}/observability/summary`
+        )
+      ),
     createProjectBackup: async (projectId, input) =>
       adaptBackupWorkflowResult(
         await requestJson(fetchImpl, `${baseUrl}/projects/${projectId}/backups`, jsonRequest('POST', compact(input)))
@@ -1014,6 +1096,12 @@ export function createApiClient(
     getVersionHistorySnapshot: async (projectId, snapshotId) =>
       adaptVersionHistorySnapshot(
         await requestJson(fetchImpl, `${baseUrl}/version-history/${projectId}/snapshots/${snapshotId}`)
+      ),
+    listReviewReports: async (projectId) =>
+      adaptReviewReportList(await requestJson(fetchImpl, `${baseUrl}/projects/${projectId}/review/reports`)),
+    recordReviewFindingAction: async (findingId, input) =>
+      adaptReviewFindingActionResult(
+        await requestJson(fetchImpl, `${baseUrl}/review/findings/${findingId}/actions`, jsonRequest('POST', input))
       ),
     summarizeRecurringIssues: async (input) =>
       adaptRecurringIssueSummaryResult(
@@ -1433,6 +1521,53 @@ function adaptRevisionRecheckResult(value: unknown): RevisionRecheckResult {
   };
 }
 
+function adaptReviewReportList(value: unknown): ReviewReport[] {
+  const rawReports = Array.isArray(value)
+    ? value
+    : isRecord(value) && Array.isArray(value.reports)
+      ? value.reports
+      : [];
+  return rawReports.flatMap((report) => (isRecord(report) ? [adaptReviewReport(report)] : []));
+}
+
+function adaptReviewReport(value: Record<string, unknown>): ReviewReport {
+  const profile = isRecord(value.profile) ? value.profile : {};
+  const qualityScore = isRecord(value.qualityScore) ? value.qualityScore : {};
+
+  return {
+    id: stringOrFallback(value.id, ''),
+    projectId: stringOrFallback(value.projectId, ''),
+    manuscriptVersionId: stringOrFallback(value.manuscriptVersionId, ''),
+    profile: {
+      id: stringOrFallback(profile.id, ''),
+      name: stringOrFallback(profile.name, ''),
+      enabledCategories: stringArrayOrEmpty(profile.enabledCategories)
+    },
+    findings: Array.isArray(value.findings) ? value.findings.filter(isRecord).map(adaptReviewFinding) : [],
+    qualityScore: {
+      overall: numberOrFallback(qualityScore.overall, 0),
+      continuity: numberOrFallback(qualityScore.continuity, 0),
+      promiseSatisfaction: numberOrFallback(qualityScore.promiseSatisfaction, 0),
+      prose: numberOrFallback(qualityScore.prose, 0)
+    },
+    openFindingCount: numberOrFallback(value.openFindingCount, 0)
+  };
+}
+
+function adaptReviewFindingActionResult(value: unknown): ReviewFindingActionResult {
+  if (!isRecord(value)) throw new Error('Invalid review finding action response');
+  return {
+    findingId: stringOrFallback(value.findingId, ''),
+    action: isReviewFindingActionKind(value.action) ? value.action : 'Accepted',
+    previousStatus: isReviewFindingStatus(value.previousStatus) ? value.previousStatus : 'Open',
+    nextStatus: isReviewFindingStatus(value.nextStatus) ? value.nextStatus : 'Open',
+    decidedBy: typeof value.decidedBy === 'string' ? value.decidedBy : undefined,
+    reason: typeof value.reason === 'string' ? value.reason : undefined,
+    createdTaskId: typeof value.createdTaskId === 'string' ? value.createdTaskId : undefined,
+    occurredAt: stringOrFallback(value.occurredAt, '')
+  };
+}
+
 function adaptRecurringIssueSummary(value: Record<string, unknown>): RecurringIssueSummary {
   return {
     signature: stringOrFallback(value.signature, ''),
@@ -1715,6 +1850,8 @@ function adaptWritingRunResult(value: unknown): WritingRunResult {
     manuscriptVersionId: typeof value.manuscriptVersionId === 'string' ? value.manuscriptVersionId : null,
     draftArtifact: {
       id: stringOrFallback(value.draftArtifact.id, ''),
+      artifactRecordId:
+        typeof value.draftArtifact.artifactRecordId === 'string' ? value.draftArtifact.artifactRecordId : undefined,
       type: stringOrFallback(value.draftArtifact.type, ''),
       status: stringOrFallback(value.draftArtifact.status, ''),
       text: stringOrFallback(value.draftArtifact.text, ''),
@@ -1744,6 +1881,29 @@ function adaptWritingRunResult(value: unknown): WritingRunResult {
           retrievalTrace: [],
           createdAt: ''
         }
+  };
+}
+
+function adaptAcceptDraftResult(value: unknown): AcceptDraftResult {
+  if (!isRecord(value)) throw new Error('Invalid accept draft response');
+  const approvals = Array.isArray(value.approvals) ? value.approvals.filter(isRecord) : [];
+
+  return {
+    status: value.status === 'Accepted' ? 'Accepted' : 'PendingApproval',
+    projectId: stringOrFallback(value.projectId, ''),
+    chapterId: stringOrFallback(value.chapterId, ''),
+    versionId: stringOrFallback(value.versionId, ''),
+    sourceRunId: stringOrFallback(value.sourceRunId, ''),
+    draftArtifactId: stringOrFallback(value.draftArtifactId, ''),
+    approvals: approvals.map((approval) => ({
+      id: stringOrFallback(approval.id, ''),
+      targetType: stringOrFallback(approval.targetType, ''),
+      targetId: stringOrFallback(approval.targetId, ''),
+      status: stringOrFallback(approval.status, ''),
+      riskLevel: stringOrFallback(approval.riskLevel, ''),
+      reason: stringOrFallback(approval.reason, '')
+    })),
+    candidates: Array.isArray(value.candidates) ? value.candidates : []
   };
 }
 
@@ -2134,6 +2294,16 @@ function isReviewLearningEventKind(value: unknown): value is ReviewLearningEvent
     value === 'Rejected' ||
     value === 'Resolved' ||
     value === 'Regression'
+  );
+}
+
+function isReviewFindingActionKind(value: unknown): value is ReviewFindingActionKind {
+  return (
+    value === 'Accepted' ||
+    value === 'Rejected' ||
+    value === 'FalsePositive' ||
+    value === 'ApplyRevision' ||
+    value === 'ConvertToTask'
   );
 }
 

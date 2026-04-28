@@ -183,6 +183,11 @@ nav a:hover {
   padding: 16px;
 }
 
+.surface-panel *,
+.work-surface * {
+  min-width: 0;
+}
+
 .surface-panel h2,
 .surface-panel h3,
 .surface-panel p,
@@ -197,6 +202,21 @@ nav a:hover {
 .surface-panel p,
 .compact-list dd {
   color: #61717f;
+}
+
+.surface-panel p,
+.surface-panel li,
+.surface-panel dt,
+.surface-panel dd,
+.surface-panel button,
+.draft-editor {
+  overflow-wrap: anywhere;
+}
+
+.surface-panel ul {
+  margin: 0;
+  min-width: 0;
+  padding-left: 18px;
 }
 
 .panel-header {

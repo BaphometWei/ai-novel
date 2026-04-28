@@ -143,6 +143,62 @@ describe('persistent API runtime', () => {
     runtime.database.client.close();
   });
 
+  it('refreshes provider settings for each gateway creation', async () => {
+    const seenModels: string[] = [];
+    const runtime = await createPersistentApiRuntime(':memory:', {
+      env: { OPENAI_API_KEY: 'sk-runtime-secret' },
+      fetch: async (_url, init) => {
+        const body = JSON.parse(String(init.body)) as { model: string };
+        seenModels.push(body.model);
+        return jsonResponse({
+          choices: [{ message: { content: '{"title":"Provider chapter","nextAction":"Continue"}' } }],
+          usage: { prompt_tokens: 17, completion_tokens: 11 }
+        });
+      },
+      providerSettings: {
+        provider: 'openai',
+        defaultModel: 'gpt-before',
+        secretRef: 'env:OPENAI_API_KEY',
+        redactedMetadata: {},
+        updatedAt: '2026-04-27T06:00:00.000Z'
+      }
+    });
+
+    const projectResponse = await runtime.app.inject({
+      method: 'POST',
+      url: '/projects',
+      payload: {
+        title: 'Refresh Project',
+        language: 'en-US',
+        targetAudience: 'serial fiction readers'
+      }
+    });
+    const project = projectResponse.json();
+
+    await runtime.app.inject({
+      method: 'POST',
+      url: '/orchestration/runs',
+      payload: orchestrationPayload(project.id, 'First refresh run')
+    });
+    await runtime.stores.settings.saveProviderSettings({
+      provider: 'openai',
+      defaultModel: 'gpt-after',
+      secretRef: 'env:OPENAI_API_KEY',
+      redactedMetadata: {},
+      updatedAt: '2026-04-27T07:00:00.000Z'
+    });
+    await runtime.app.inject({
+      method: 'POST',
+      url: '/orchestration/runs',
+      payload: orchestrationPayload(project.id, 'Second refresh run')
+    });
+
+    expect(seenModels).toEqual(['gpt-before', 'gpt-after']);
+
+    await runtime.app.close();
+    runtime.database.client.close();
+  });
+
   it('exposes persistent Agent Room approvals and durable job lineage for orchestration runs', async () => {
     const runtime = await createPersistentApiRuntime(':memory:');
 
@@ -223,9 +279,8 @@ describe('persistent API runtime', () => {
     runtime.database.client.close();
   });
 
-  it('fails closed when OpenAI is configured but the env secret is missing', async () => {
-    await expect(
-      createPersistentApiRuntime(':memory:', {
+  it('fails closed at run time when OpenAI is configured but the env secret is missing', async () => {
+    const runtime = await createPersistentApiRuntime(':memory:', {
         env: {},
         providerSettings: {
           provider: 'openai',
@@ -234,7 +289,40 @@ describe('persistent API runtime', () => {
           redactedMetadata: {},
           updatedAt: '2026-04-27T06:00:00.000Z'
         }
-      })
-    ).rejects.toThrow('Missing provider secret: env:OPENAI_API_KEY');
+    });
+    const projectResponse = await runtime.app.inject({
+      method: 'POST',
+      url: '/projects',
+      payload: {
+        title: 'Missing Secret',
+        language: 'en-US',
+        targetAudience: 'serial fiction readers'
+      }
+    });
+
+    const response = await runtime.app.inject({
+      method: 'POST',
+      url: '/orchestration/runs',
+      payload: orchestrationPayload(projectResponse.json().id, 'Plan without secret')
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json().error).toContain('Missing provider secret: env:OPENAI_API_KEY');
+
+    await runtime.app.close();
+    runtime.database.client.close();
   });
 });
+
+function orchestrationPayload(projectId: string, taskGoal: string) {
+  return {
+    projectId,
+    workflowType: 'chapter_creation',
+    taskType: 'chapter_planning',
+    agentRole: 'Planner',
+    taskGoal,
+    riskLevel: 'Medium',
+    outputSchema: 'ChapterPlan',
+    promptVersionId: 'prompt_chapter_plan_v1'
+  };
+}

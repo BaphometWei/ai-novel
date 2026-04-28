@@ -42,8 +42,17 @@ export interface ApprovalPersistenceRequest {
 }
 
 export interface ApprovalPersistenceRepository {
+  findApprovalRequestById?(id: string): Promise<ApprovalPersistenceRequest | null>;
   listPendingApprovalRequests(): Promise<ApprovalPersistenceRequest[]>;
   updateApprovalRequestStatus(id: string, status: ApprovalDecisionStatus): Promise<ApprovalPersistenceRequest | null>;
+}
+
+export interface ApprovalDecisionEffects {
+  resolveMemoryCandidate?(
+    approval: ApprovalPersistenceRequest,
+    decision: { status: ApprovalDecisionStatus; decidedBy?: string; note?: string; decidedAt: string }
+  ): Promise<void>;
+  updateApprovalReferenceStatus?(approvalRequestId: string, status: ApprovalDecisionStatus): Promise<void>;
 }
 
 const decisionSchema = z.object({
@@ -86,19 +95,26 @@ export function createInMemoryApprovalStore(items: ApprovalRouteItem[] = []): Ap
 
 export function createRepositoryApprovalStore(
   repository: ApprovalPersistenceRepository,
-  clock: () => string = () => new Date().toISOString()
+  options: { clock?: () => string; effects?: ApprovalDecisionEffects } = {}
 ): ApprovalRouteStore {
+  const clock = options.clock ?? (() => new Date().toISOString());
   return {
     async listPending() {
       return (await repository.listPendingApprovalRequests()).map(toRouteItem);
     },
     async decide(id, decision) {
+      const before = repository.findApprovalRequestById ? await repository.findApprovalRequestById(id) : null;
       const updated = await repository.updateApprovalRequestStatus(id, decision.status);
       if (!updated) return null;
+      const decidedAt = clock();
+      if ((!before || before.status === 'Pending') && updated.status === decision.status) {
+        await options.effects?.resolveMemoryCandidate?.(updated, { ...decision, decidedAt });
+        await options.effects?.updateApprovalReferenceStatus?.(id, decision.status);
+      }
 
       return {
         ...toRouteItem(updated),
-        decidedAt: clock(),
+        decidedAt,
         decidedBy: decision.decidedBy,
         decisionNote: decision.note
       };

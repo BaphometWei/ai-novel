@@ -66,6 +66,14 @@ export interface AddChapterVersionInput {
   makeCurrent?: boolean;
 }
 
+export interface ResolveGovernedVersionInput {
+  versionId: string;
+  status: Extract<ChapterVersionStatus, 'Accepted' | 'Rejected'>;
+  decidedAt: string;
+  decidedBy?: string;
+  decisionNote?: string;
+}
+
 export class ManuscriptRepository {
   constructor(private readonly db: AppDatabase) {}
 
@@ -200,6 +208,57 @@ export class ManuscriptRepository {
 
   async addChapterVersion(input: AddChapterVersionInput): Promise<ChapterVersionRecord> {
     return this.addChapterVersionInDatabase(this.db, input);
+  }
+
+  async resolveGovernedVersion(input: ResolveGovernedVersionInput): Promise<ChapterVersionRecord | null> {
+    const row = await this.db
+      .select()
+      .from(chapterVersions)
+      .where(eq(chapterVersions.id, input.versionId))
+      .get();
+    if (!row) return null;
+
+    const metadata = {
+      ...(JSON.parse(row.metadataJson) as Record<string, unknown>),
+      governanceStatus: input.status === 'Accepted' ? 'Approved' : 'Rejected',
+      decidedAt: input.decidedAt,
+      ...(input.decidedBy ? { decidedBy: input.decidedBy } : {}),
+      ...(input.decisionNote ? { decisionNote: input.decisionNote } : {})
+    };
+
+    await this.withTransaction(async () => {
+      if (input.status === 'Accepted') {
+        await this.db
+          .update(chapterVersions)
+          .set({ status: 'Superseded' })
+          .where(and(eq(chapterVersions.chapterId, row.chapterId), eq(chapterVersions.status, 'Accepted')));
+      }
+
+      await this.db
+        .update(chapterVersions)
+        .set({
+          status: input.status,
+          metadataJson: JSON.stringify(metadata)
+        })
+        .where(eq(chapterVersions.id, input.versionId));
+
+      if (input.status === 'Accepted') {
+        await this.db
+          .update(chapters)
+          .set({ currentVersionId: input.versionId, updatedAt: input.decidedAt })
+          .where(eq(chapters.id, row.chapterId));
+      }
+    });
+
+    return {
+      id: row.id,
+      chapterId: row.chapterId,
+      bodyArtifactId: row.bodyArtifactId,
+      versionNumber: row.versionNumber,
+      status: input.status,
+      metadata,
+      createdAt: row.createdAt
+    };
   }
 
   private async addChapterVersionInDatabase(db: DatabaseLike, input: AddChapterVersionInput): Promise<ChapterVersionRecord> {

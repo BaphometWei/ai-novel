@@ -25,15 +25,24 @@ const budgetDefaultsSchema = z.object({
   provider: z.string().min(1).default('openai'),
   maxRunCostUsd: z.number().positive(),
   maxDailyCostUsd: z.number().positive().optional(),
-  maxContextTokens: z.number().int().positive().optional()
+  maxContextTokens: z.number().int().min(512).optional()
 });
 
-const sourcePolicyDefaultsSchema = z.object({
-  allowUserSamples: z.boolean().optional(),
-  allowLicensedSamples: z.boolean().optional(),
-  allowPublicDomain: z.boolean().optional(),
-  restrictedSourceIds: z.array(z.string().min(1)).optional()
-});
+const sourcePolicyDefaultsSchema = z
+  .object({
+    allowUserSamples: z.boolean().optional(),
+    allowLicensedSamples: z.boolean().optional(),
+    allowPublicDomain: z.boolean().optional(),
+    restrictedSourceIds: z.array(z.string().min(1)).optional()
+  })
+  .superRefine((input, context) => {
+    if (input.allowUserSamples === false && input.allowLicensedSamples === false && input.allowPublicDomain === false) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'At least one source class must be enabled'
+      });
+    }
+  });
 
 export function registerSettingsRoutes(app: FastifyInstance, service: SettingsService = new SettingsService()) {
   app.put('/settings/providers/:provider', async (request, reply) => {

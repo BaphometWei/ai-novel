@@ -112,6 +112,98 @@ describe('accepted manuscript governance', () => {
       ])
     );
 
+    const approvalId = acceptance.json().approvals[0].id;
+    const approval = await runtime.app.inject({
+      method: 'POST',
+      url: `/approvals/${approvalId}/approve`,
+      payload: { decidedBy: 'operator', note: 'canon approved' }
+    });
+    const chapters = await runtime.app.inject({ method: 'GET', url: `/projects/${project.id}/chapters` });
+    const canonRows = await runtime.database.client.execute(
+      `SELECT text, status, source_references_json FROM canon_facts WHERE project_id = '${project.id}'`
+    );
+    const candidateRows = await runtime.database.client.execute(
+      `SELECT status FROM memory_candidate_facts WHERE approval_request_id = '${approvalId}'`
+    );
+
+    expect(approval.statusCode).toBe(200);
+    expect(approval.json()).toMatchObject({ id: approvalId, status: 'Approved', decidedBy: 'operator' });
+    expect(chapters.json()[0]).toMatchObject({
+      currentVersionId: acceptance.json().versionId,
+      versions: expect.arrayContaining([
+        expect.objectContaining({
+          id: acceptance.json().versionId,
+          status: 'Accepted',
+          metadata: expect.objectContaining({ governanceStatus: 'Approved' })
+        })
+      ])
+    });
+    expect(canonRows.rows).toEqual([
+      expect.objectContaining({
+        text: 'The city crown is destroyed, changing canon.',
+        status: 'Canon'
+      })
+    ]);
+    expect(String(canonRows.rows[0].source_references_json)).toContain(acceptance.json().versionId);
+    expect(candidateRows.rows).toEqual([expect.objectContaining({ status: 'Promoted' })]);
+
+    runtime.database.client.close();
+    await runtime.app.close();
+  });
+
+  it('rejects accepting a draft when artifact text provenance is tampered', async () => {
+    const runtime = await createPersistentApiRuntime(':memory:', {
+      fallbackProvider: fakeProvider()
+    });
+
+    const projectResponse = await runtime.app.inject({
+      method: 'POST',
+      url: '/projects',
+      payload: {
+        title: 'Seed Project',
+        language: 'zh-CN',
+        targetAudience: 'Chinese web-novel readers'
+      }
+    });
+    const project = projectResponse.json();
+    const chapterResponse = await runtime.app.inject({
+      method: 'POST',
+      url: `/projects/${project.id}/chapters`,
+      payload: { title: 'Chapter 1', order: 1, body: 'Initial draft.', status: 'Draft' }
+    });
+    const { chapter } = chapterResponse.json();
+    const runResponse = await runtime.app.inject({
+      method: 'POST',
+      url: `/projects/${project.id}/writing-runs`,
+      payload: {
+        target: { manuscriptId: chapter.manuscriptId, chapterId: chapter.id, range: 'chapter_1' },
+        contract: {
+          authorshipLevel: 'A3',
+          goal: 'Draft a canon-changing scene',
+          mustWrite: 'Destroy the city crown.',
+          wordRange: { min: 100, max: 400 },
+          forbiddenChanges: ['Do not silently promote canon'],
+          acceptanceCriteria: ['Requires governance']
+        },
+        retrieval: { query: 'city crown' }
+      }
+    });
+    const run = runResponse.json();
+
+    const acceptance = await runtime.app.inject({
+      method: 'POST',
+      url: `/chapters/${chapter.id}/accept-draft`,
+      payload: {
+        runId: run.agentRunId,
+        draftArtifactId: run.draftArtifact.artifactRecordId,
+        body: `${run.draftArtifact.text} Tampered extra sentence.`,
+        acceptedBy: 'operator'
+      }
+    });
+
+    expect(acceptance.statusCode).toBe(409);
+    expect(acceptance.json()).toMatchObject({ error: 'Draft provenance mismatch' });
+
     runtime.database.client.close();
     await runtime.app.close();
   });

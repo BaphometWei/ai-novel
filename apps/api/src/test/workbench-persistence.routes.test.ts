@@ -75,6 +75,7 @@ describe('persistent workbench API routes', () => {
     });
 
     const reloadedReview = await runtime.app.inject({ method: 'GET', url: `/projects/${project.id}/review/reports/${reviewReport.id}` });
+    const listedReviews = await runtime.app.inject({ method: 'GET', url: `/projects/${project.id}/review/reports` });
     const sourceContext = await runtime.app.inject({ method: 'GET', url: `/projects/${project.id}/knowledge/generation-context` });
     const feedbackSummary = await runtime.app.inject({
       method: 'GET',
@@ -90,6 +91,14 @@ describe('persistent workbench API routes', () => {
       openFindingCount: 1,
       findings: [{ problem: 'Secret used before reveal.' }]
     });
+    expect(listedReviews.statusCode).toBe(200);
+    expect(listedReviews.json()).toMatchObject([
+      {
+        id: reviewReport.id,
+        projectId: project.id,
+        findings: [{ problem: 'Secret used before reveal.' }]
+      }
+    ]);
     expect(sourceContext.json().included).toEqual([knowledgeResponse.json()]);
     expect(feedbackSummary.json()).toMatchObject({
       longTermPlanId: 'plan_main',

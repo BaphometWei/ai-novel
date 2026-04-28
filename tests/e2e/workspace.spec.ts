@@ -79,6 +79,7 @@ test('workspace has no horizontal overflow on desktop and mobile', async ({ brow
     { width: 390, height: 1200 }
   ]) {
     const page = await browser.newPage({ viewport });
+    await routeSelectedProject(page);
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Manuscript Editor' })).toBeVisible();
 
@@ -335,56 +336,8 @@ test('version history shows mocked snapshots and creates a traceable restore poi
 });
 
 test('observability dashboard exposes cost token latency and adoption signals', async ({ page }) => {
-  await page.route('**/api/observability/summary', async (route) => {
-    await route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({
-        cost: { totalUsd: 12.345, averageUsdPerRun: 2.469 },
-        latency: { averageDurationMs: 432, p95DurationMs: 900 },
-        tokens: { total: 9876, averagePerRun: 1975.2 },
-        quality: {
-          acceptedRate: 0.75,
-          openIssueCount: 4,
-          highSeverityOpenCount: 2,
-          outcomes: { accepted: 3, needs_revision: 1 }
-        },
-        adoption: {
-          adoptedRate: 0.5,
-          partialRate: 0.25,
-          rejectedRate: 0.25,
-          byFeature: {}
-        },
-        modelUsage: [
-          {
-            modelProvider: 'openai',
-            modelName: 'gpt-5-mini',
-            runCount: 7,
-            totalTokens: 9876,
-            totalCostUsd: 12.345
-          }
-        ],
-        runErrors: [
-          {
-            code: 'schema_validation',
-            count: 2,
-            retryableCount: 1,
-            maxSeverity: 'Error'
-          }
-        ],
-        workflowBottlenecks: [
-          {
-            workflowType: 'draft',
-            stepName: 'generate-draft',
-            runCount: 3,
-            averageDurationMs: 1200,
-            failureRate: 0.33,
-            retryPressure: 2
-          }
-        ],
-        dataQuality: { openIssueCount: 4, highSeverityOpenCount: 2 }
-      })
-    });
-  });
+  await page.route('**/api/projects/project_1/observability/summary', fulfillObservabilitySummary);
+  await page.route('**/api/observability/summary', fulfillObservabilitySummary);
 
   await page.goto('/');
 
@@ -673,6 +626,54 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
     status,
     contentType: 'application/json',
     body: JSON.stringify(body)
+  });
+}
+
+async function fulfillObservabilitySummary(route: Route) {
+  await fulfillJson(route, {
+    cost: { totalUsd: 12.345, averageUsdPerRun: 2.469 },
+    latency: { averageDurationMs: 432, p95DurationMs: 900 },
+    tokens: { total: 9876, averagePerRun: 1975.2 },
+    quality: {
+      acceptedRate: 0.75,
+      openIssueCount: 4,
+      highSeverityOpenCount: 2,
+      outcomes: { accepted: 3, needs_revision: 1 }
+    },
+    adoption: {
+      adoptedRate: 0.5,
+      partialRate: 0.25,
+      rejectedRate: 0.25,
+      byFeature: {}
+    },
+    modelUsage: [
+      {
+        modelProvider: 'openai',
+        modelName: 'gpt-5-mini',
+        runCount: 7,
+        totalTokens: 9876,
+        totalCostUsd: 12.345
+      }
+    ],
+    runErrors: [
+      {
+        code: 'schema_validation',
+        count: 2,
+        retryableCount: 1,
+        maxSeverity: 'Error'
+      }
+    ],
+    workflowBottlenecks: [
+      {
+        workflowType: 'draft',
+        stepName: 'generate-draft',
+        runCount: 3,
+        averageDurationMs: 1200,
+        failureRate: 0.33,
+        retryPressure: 2
+      }
+    ],
+    dataQuality: { openIssueCount: 4, highSeverityOpenCount: 2 }
   });
 }
 

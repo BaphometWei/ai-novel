@@ -26,4 +26,26 @@ describe('SearchRepository', () => {
     ]);
     database.client.close();
   });
+
+  it('treats punctuation-heavy agent goals as plain search terms', async () => {
+    const database = createDatabase(':memory:');
+    await migrateDatabase(database.client);
+    const repository = new SearchRepository(database.client);
+
+    await repository.indexDocument({
+      id: 'manuscript_provider_backed',
+      projectId: 'project_abc',
+      sourceType: 'manuscript',
+      title: 'Provider backed chapter',
+      body: 'Plan the provider backed chapter without raw caller context.'
+    });
+
+    await expect(repository.search({ projectId: 'project_abc', query: 'Plan the provider-backed chapter' })).resolves.toEqual([
+      expect.objectContaining({
+        id: 'manuscript_provider_backed',
+        sourceType: 'manuscript'
+      })
+    ]);
+    database.client.close();
+  });
 });

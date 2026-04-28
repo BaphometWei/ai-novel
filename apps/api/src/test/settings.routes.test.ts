@@ -133,4 +133,36 @@ describe('settings API routes', () => {
 
     await app.close();
   });
+
+  it('rejects unsafe budget and source policy defaults', async () => {
+    const app = Fastify();
+    registerSettingsRoutes(app, new SettingsService());
+
+    const lowContextBudget = await app.inject({
+      method: 'PUT',
+      url: '/settings/budgets/defaults',
+      payload: {
+        provider: 'openai',
+        maxRunCostUsd: 0.5,
+        maxDailyCostUsd: 5,
+        maxContextTokens: 511
+      }
+    });
+    const disabledSourcePolicy = await app.inject({
+      method: 'PUT',
+      url: '/settings/source-policy/defaults',
+      payload: {
+        allowUserSamples: false,
+        allowLicensedSamples: false,
+        allowPublicDomain: false
+      }
+    });
+
+    expect(lowContextBudget.statusCode).toBe(400);
+    expect(lowContextBudget.json()).toEqual({ error: 'Invalid settings payload' });
+    expect(disabledSourcePolicy.statusCode).toBe(400);
+    expect(disabledSourcePolicy.json()).toEqual({ error: 'Invalid settings payload' });
+
+    await app.close();
+  });
 });

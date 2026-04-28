@@ -37,7 +37,7 @@ export class SearchRepository {
         FROM search_documents
         WHERE project_id = ? AND search_documents MATCH ?
         ORDER BY rank`,
-      args: [input.projectId, input.query]
+      args: [input.projectId, toFtsQuery(input.query)]
     });
 
     return result.rows.map((row) => ({
@@ -47,4 +47,13 @@ export class SearchRepository {
       snippet: String(row.snippet)
     }));
   }
+}
+
+function toFtsQuery(query: string): string {
+  const terms = query
+    .split(/[^\p{L}\p{N}_]+/u)
+    .map((term) => term.trim())
+    .filter(Boolean);
+
+  return terms.length > 0 ? terms.map((term) => `"${term.replace(/"/g, '""')}"`).join(' ') : '""';
 }

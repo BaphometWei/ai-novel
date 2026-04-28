@@ -6,8 +6,10 @@ export type NarrativeStateType =
   | 'promise'
   | 'secret'
   | 'arc'
+  | 'timeline'
   | 'timeline_event'
   | 'world_rule'
+  | 'dependency'
   | 'dependency_finding'
   | 'closure'
   | 'source_metadata';

@@ -35,7 +35,8 @@ describe('writing workbench', () => {
         status: 'AwaitingAcceptance',
         manuscriptVersionId: null,
         draftArtifact: {
-          id: 'artifact_draft_1',
+          id: 'workflow_draft_1',
+          artifactRecordId: 'artifact_draft_record_1',
           type: 'draft_prose',
           status: 'Draft',
           text: 'Mara waited under the clocktower until the courier arrived.',
@@ -77,12 +78,25 @@ describe('writing workbench', () => {
           acceptanceCriteria: ['Ready for author acceptance']
         }
       })),
-      addChapterVersion: vi.fn(async () => ({
-        id: 'version_accepted',
+      addChapterVersion: vi.fn(),
+      acceptDraft: vi.fn(async () => ({
+        status: 'PendingApproval' as const,
+        projectId: 'project_api',
         chapterId: 'chapter_api_2',
-        versionNumber: 3,
-        bodyArtifactId: 'artifact_accepted',
-        status: 'Accepted'
+        versionId: 'version_pending',
+        sourceRunId: 'agent_run_1',
+        draftArtifactId: 'artifact_draft_record_1',
+        approvals: [
+          {
+            id: 'approval_memory_1',
+            targetType: 'memory_candidate_fact',
+            targetId: 'memory_candidate_1',
+            status: 'Pending',
+            riskLevel: 'High' as const,
+            reason: 'Memory candidate requires approval'
+          }
+        ],
+        candidates: []
       }))
     };
 
@@ -100,28 +114,29 @@ describe('writing workbench', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Accept draft into manuscript' }));
 
     await waitFor(() => {
-      expect(client.addChapterVersion).toHaveBeenCalledWith('chapter_api_2', {
+      expect(client.acceptDraft).toHaveBeenCalledWith('chapter_api_2', {
+        runId: 'agent_run_1',
+        draftArtifactId: 'artifact_draft_record_1',
         body: 'Mara waited under the clocktower until the courier arrived.',
-        status: 'Accepted',
-        makeCurrent: true,
-        metadata: {
-          acceptedFromRunId: 'agent_run_1',
-          draftArtifactId: 'artifact_draft_1'
-        }
+        acceptedBy: 'operator'
       });
     });
-    expect(screen.getByText('Accepted as version_accepted.')).toBeInTheDocument();
+    expect(screen.getByText('Pending approval for version_pending.')).toBeInTheDocument();
+    expect(screen.getByText('Memory candidate requires approval')).toBeInTheDocument();
   });
 
   it('accepts the edited draft text shown in the editor', async () => {
     const client = createWritingClient({
       startWritingRun: vi.fn(async () => writingRunResult()),
-      addChapterVersion: vi.fn(async () => ({
-        id: 'version_accepted',
+      acceptDraft: vi.fn(async () => ({
+        status: 'Accepted' as const,
+        projectId: 'project_api',
         chapterId: 'chapter_api_1',
-        versionNumber: 2,
-        bodyArtifactId: 'artifact_accepted',
-        status: 'Accepted'
+        versionId: 'version_accepted',
+        sourceRunId: 'agent_run_1',
+        draftArtifactId: 'artifact_draft_1',
+        approvals: [],
+        candidates: []
       }))
     });
 
@@ -136,12 +151,11 @@ describe('writing workbench', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Accept draft into manuscript' }));
 
     await waitFor(() => {
-      expect(client.addChapterVersion).toHaveBeenCalledWith(
+      expect(client.acceptDraft).toHaveBeenCalledWith(
         'chapter_api_1',
         expect.objectContaining({
           body: 'Author-polished clocktower draft.',
-          status: 'Accepted',
-          makeCurrent: true
+          acceptedBy: 'operator'
         })
       );
     });
@@ -162,6 +176,27 @@ describe('writing workbench', () => {
       'Existing persisted opening body.'
     );
     expect(client.getChapterCurrentBody).toHaveBeenCalledWith('chapter_api_1');
+  });
+
+  it('loads chapters for the selected project passed by the app shell', async () => {
+    const client = createWritingClient({
+      listProjects: vi.fn(async () => [{ id: 'project_fallback', title: 'Fallback Project' }]),
+      listProjectChapters: vi.fn(async () => [
+        {
+          id: 'chapter_selected_1',
+          title: 'Selected Project Chapter',
+          manuscriptId: 'manuscript_selected',
+          currentVersionId: 'version_selected_1',
+          versions: []
+        }
+      ])
+    });
+
+    render(<ManuscriptEditor client={client} projectId="project_selected" />);
+
+    expect(await screen.findByRole('treeitem', { name: 'Selected Project Chapter' })).toBeInTheDocument();
+    expect(client.listProjects).not.toHaveBeenCalled();
+    expect(client.listProjectChapters).toHaveBeenCalledWith('project_selected');
   });
 
   it('shows API action errors and leaves controls usable', async () => {
@@ -202,7 +237,8 @@ describe('writing workbench', () => {
         }
       })),
       startWritingRun: vi.fn(),
-      addChapterVersion: vi.fn()
+      addChapterVersion: vi.fn(),
+      acceptDraft: vi.fn()
     };
 
     render(<ManuscriptEditor client={client} />);
@@ -296,6 +332,16 @@ function createWritingClient(overrides: Record<string, unknown> = {}) {
       versionNumber: 2,
       bodyArtifactId: 'artifact_accepted',
       status: 'Accepted'
+    })),
+    acceptDraft: vi.fn(async () => ({
+      status: 'Accepted' as const,
+      projectId: 'project_api',
+      chapterId: 'chapter_api_1',
+      versionId: 'version_accepted',
+      sourceRunId: 'agent_run_1',
+      draftArtifactId: 'artifact_draft_1',
+      approvals: [],
+      candidates: []
     })),
     ...overrides
   };

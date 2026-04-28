@@ -13,13 +13,13 @@ describe('ObservabilityDashboard', () => {
     const client = mockObservabilityClient();
     const loadSummary = vi.spyOn(client, 'loadObservabilitySummary');
 
-    render(<ObservabilityDashboard client={client} />);
+    render(<ObservabilityDashboard client={client} projectId="project_obs" />);
 
     expect(screen.getByText('Observability')).toBeInTheDocument();
     expect(screen.getByText('Loading observability...')).toBeInTheDocument();
 
     expect(await screen.findByText('$12.35')).toBeInTheDocument();
-    expect(loadSummary).toHaveBeenCalledTimes(1);
+    expect(loadSummary).toHaveBeenCalledWith({ projectId: 'project_obs' });
     expect(screen.getByText('Cost')).toBeInTheDocument();
     expect(screen.getByText('$2.47/run')).toBeInTheDocument();
     expect(screen.getByText('Tokens')).toBeInTheDocument();
@@ -54,6 +54,9 @@ describe('ObservabilityDashboard', () => {
 describe('observability API client helpers', () => {
   it('loads product observability summary through the injected fetch implementation', async () => {
     const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      if (String(url) === '/api/projects/project_obs/observability/summary') {
+        return jsonResponse({ ...observabilitySummary, cost: { totalUsd: 1, averageUsdPerRun: 1 } });
+      }
       if (String(url) === '/api/observability/summary') {
         return jsonResponse(observabilitySummary);
       }
@@ -61,20 +64,23 @@ describe('observability API client helpers', () => {
     });
     const client = createApiClient({ baseUrl: '/api', fetchImpl });
 
+    const projectSummary = await client.loadObservabilitySummary({ projectId: 'project_obs' });
     const summary = await client.loadObservabilitySummary();
 
+    expect(projectSummary.cost.totalUsd).toBe(1);
     expect(summary.cost.totalUsd).toBe(12.345);
     expect(summary.modelUsage[0]).toEqual(expect.objectContaining({ modelName: 'gpt-5-mini', runCount: 7 }));
     expect(summary.runErrors[0]).toEqual(expect.objectContaining({ code: 'schema_validation', retryableCount: 1 }));
     expect(summary.workflowBottlenecks[0]).toEqual(expect.objectContaining({ stepName: 'generate-draft' }));
     expect(summary.dataQuality?.openIssueCount).toBe(4);
+    expect(fetchImpl).toHaveBeenCalledWith('/api/projects/project_obs/observability/summary');
     expect(fetchImpl).toHaveBeenCalledWith('/api/observability/summary');
   });
 });
 
 function mockObservabilityClient(options: { reject?: boolean } = {}): ObservabilityApiClient {
   return {
-    loadObservabilitySummary: async () => {
+    loadObservabilitySummary: async (_input?: { projectId?: string }) => {
       if (options.reject) throw new Error('Observability summary failed');
       return observabilitySummary;
     }

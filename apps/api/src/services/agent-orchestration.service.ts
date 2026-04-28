@@ -136,7 +136,7 @@ export function createDefaultAgentOrchestrationService(stores: AgentOrchestratio
 
 export function createAgentOrchestrationService(
   stores: AgentOrchestrationStores,
-  createGateway: (input: { promptVersionId: string }) => LlmGateway
+  createGateway: (input: { promptVersionId: string }) => LlmGateway | Promise<LlmGateway>
 ): AgentOrchestrationService {
   return new PersistentAgentOrchestrationService(stores, createGateway);
 }
@@ -146,7 +146,7 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
 
   constructor(
     private readonly stores: AgentOrchestrationStores,
-    private readonly createGateway: (input: { promptVersionId: string }) => LlmGateway
+    private readonly createGateway: (input: { promptVersionId: string }) => LlmGateway | Promise<LlmGateway>
   ) {}
 
   async start(input: StartAgentOrchestrationInput): Promise<AgentOrchestrationResult> {
@@ -176,21 +176,21 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
 
     try {
       const baseContextPack =
-        this.stores.contextBuildService && input.retrieval
+        this.stores.contextBuildService
           ? await this.stores.contextBuildService.build({
               projectId: input.projectId,
               taskGoal: input.taskGoal,
               agentRole: input.agentRole,
               riskLevel: input.riskLevel,
-              query: input.retrieval.query,
-              maxContextItems: input.retrieval.maxContextItems,
-              maxSectionChars: input.retrieval.maxSectionChars
+              query: input.retrieval?.query ?? input.taskGoal,
+              maxContextItems: input.retrieval?.maxContextItems,
+              maxSectionChars: input.retrieval?.maxSectionChars
             })
           : createContextPack({
               taskGoal: input.taskGoal,
               agentRole: input.agentRole,
               riskLevel: input.riskLevel,
-              sections: input.contextSections ?? [],
+              sections: [],
               citations: [],
               exclusions: [],
               warnings: [],
@@ -213,7 +213,7 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
         riskLevel: input.riskLevel,
         outputSchema: input.outputSchema
       });
-      const gateway = this.createGateway({ promptVersionId });
+      const gateway = await this.createGateway({ promptVersionId });
       let generated: { value: Record<string, unknown> };
       try {
         generated = await gateway.generateStructured<Record<string, unknown>>({

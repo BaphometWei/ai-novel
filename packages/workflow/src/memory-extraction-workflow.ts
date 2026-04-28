@@ -50,7 +50,7 @@ export interface MemoryCandidateFact extends ExtractedMemoryFact {
   projectId: string;
   manuscriptVersionId: string;
   sourceKind: 'AcceptedManuscriptText';
-  status: 'Candidate';
+  status: 'Candidate' | 'Promoted' | 'Rejected';
   createdAt: string;
 }
 

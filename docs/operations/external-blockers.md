@@ -41,7 +41,7 @@ This handoff lists production-readiness decisions that require operator or produ
 ## Local Resume Commands
 
 ```bash
-git switch codex/production-hardening
+git switch main
 npm run verify:local
 ```
 
@@ -49,8 +49,15 @@ npm run verify:local
 
 The current deterministic/local verification path is intended to be safe for local development. It avoids paid model calls and does not require or include real provider secrets. Real-provider smoke tests should remain blocked until the API key, model budget, repository secrets, and logging/redaction expectations above are approved.
 
-### Git Push Transport Interruption
+### 2026-04-28 Agent System Completion
+
+- Local hardening uses fake providers, deterministic fixtures, injected fetch tests, and local SQLite-backed API/browser flows.
+- Live provider validation is not executed by automation.
+- Owner needed: operator with provider credentials, model budget approval, CI secret policy, and logging/redaction approval.
+- Still external: repository account/secrets setup, code signing certificates, release credentials, OS keychain product decisions, representative manuscript corpus, and quality thresholds.
+
+### Git Push Transport Note
 
 - 2026-04-28: `git push origin main` repeatedly failed after local commits with `Connection closed by 198.18.0.x port 443`.
-- `git ls-remote origin HEAD` succeeded and reported remote HEAD at `9537723d48bd1e6858d4c115108a4c6da0838fbe`, so read access is available while push transport is currently interrupted.
-- Local fallback: continue repository-local implementation with frequent commits on `main`; retry normal non-force push after each phase.
+- `git ls-remote origin HEAD` later succeeded and reported remote HEAD at `4c4891138fce42f0850d6b06d1e52c74cec3130a`, so read access is available.
+- Local fallback: continue repository-local implementation with commits on `main`; retry normal non-force push during final handoff. A later successful push closes this transport note without product action.

@@ -131,6 +131,28 @@ describe('import/export API routes', () => {
       project: { id: 'project_runtime' }
     });
 
+    const importWorkerRun = await runtime.app.inject({ method: 'POST', url: '/workflow/worker/run-once' });
+    const exportWorkerRun = await runtime.app.inject({ method: 'POST', url: '/workflow/worker/run-once' });
+    const persistedImportJob = await runtime.app.inject({
+      method: 'GET',
+      url: `/workflow/jobs/${importResponse.json().job.id}`
+    });
+    const persistedExportJob = await runtime.app.inject({
+      method: 'GET',
+      url: `/workflow/jobs/${exported.job.id}`
+    });
+
+    expect(importWorkerRun.json()).toEqual({ claimed: 1, completed: 1, failed: 0 });
+    expect(exportWorkerRun.json()).toEqual({ claimed: 1, completed: 1, failed: 0 });
+    expect(persistedImportJob.json()).toMatchObject({
+      status: 'Succeeded',
+      payload: { output: { status: 'Imported', sourceUri: 'upload://runtime.zip' } }
+    });
+    expect(persistedExportJob.json()).toMatchObject({
+      status: 'Succeeded',
+      payload: { output: { status: 'Exported', bundleUri: exported.bundle.uri } }
+    });
+
     await runtime.app.close();
     runtime.database.client.close();
   });

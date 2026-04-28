@@ -12,6 +12,18 @@ export interface AcceptanceMemoryRepository extends MemoryExtractionRepository {
   linkCandidateApproval(candidateId: string, approvalRequestId: string): Promise<void>;
 }
 
+export interface AcceptanceArtifactMetadataStore {
+  findById(id: string): Promise<{ id: string; uri: string; relatedRunId?: string } | null>;
+}
+
+export interface AcceptanceArtifactContentStore {
+  readText(uri: string): Promise<string>;
+}
+
+export interface AcceptanceDurableJobStore {
+  findByAgentRunId(agentRunId: string): Promise<{ payload: Record<string, unknown> } | null>;
+}
+
 export interface AcceptDraftInput {
   chapterId: EntityId<'chapter'>;
   runId: EntityId<'agent_run'>;
@@ -46,6 +58,9 @@ export function createAcceptanceWorkflowService(input: {
   manuscriptService: ManuscriptService;
   memoryRepository: AcceptanceMemoryRepository;
   governanceGate: GovernanceGateService;
+  artifacts?: AcceptanceArtifactMetadataStore;
+  artifactContent?: AcceptanceArtifactContentStore;
+  durableJobs?: AcceptanceDurableJobStore;
   clock?: () => string;
   createId?: (prefix: 'memory_candidate' | 'approval_request') => string;
 }): AcceptanceWorkflowService {
@@ -53,6 +68,9 @@ export function createAcceptanceWorkflowService(input: {
     input.manuscriptService,
     input.memoryRepository,
     input.governanceGate,
+    input.artifacts,
+    input.artifactContent,
+    input.durableJobs,
     input.clock ?? (() => new Date().toISOString()),
     input.createId ?? ((prefix) => `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`)
   );
@@ -63,6 +81,9 @@ class RepositoryAcceptanceWorkflowService implements AcceptanceWorkflowService {
     private readonly manuscriptService: ManuscriptService,
     private readonly memoryRepository: AcceptanceMemoryRepository,
     private readonly governanceGate: GovernanceGateService,
+    private readonly artifacts: AcceptanceArtifactMetadataStore | undefined,
+    private readonly artifactContent: AcceptanceArtifactContentStore | undefined,
+    private readonly durableJobs: AcceptanceDurableJobStore | undefined,
     private readonly clock: () => string,
     private readonly createId: (prefix: 'memory_candidate' | 'approval_request') => string
   ) {}
@@ -72,6 +93,7 @@ class RepositoryAcceptanceWorkflowService implements AcceptanceWorkflowService {
     if (!chapter) {
       throw new Error(`Chapter not found: ${input.chapterId}`);
     }
+    await this.assertDraftProvenance(input, chapter.projectId);
 
     const version = await this.manuscriptService.addChapterVersion(input.chapterId, {
       body: input.body,
@@ -138,6 +160,40 @@ class RepositoryAcceptanceWorkflowService implements AcceptanceWorkflowService {
       candidates: memory.candidates
     };
   }
+
+  private async assertDraftProvenance(input: AcceptDraftInput, projectId: string): Promise<void> {
+    if (!this.artifacts || !this.artifactContent || !this.durableJobs) return;
+
+    const [artifact, job] = await Promise.all([
+      this.artifacts.findById(input.draftArtifactId),
+      this.durableJobs.findByAgentRunId(input.runId)
+    ]);
+    if (!artifact || artifact.relatedRunId !== input.runId || !job) {
+      throw new Error('Draft provenance mismatch');
+    }
+    if (job.payload.projectId !== projectId || job.payload.draftArtifactId !== input.draftArtifactId) {
+      throw new Error('Draft provenance mismatch');
+    }
+    const target = job.payload.target;
+    if (!target || typeof target !== 'object' || (target as { chapterId?: unknown }).chapterId !== input.chapterId) {
+      throw new Error('Draft provenance mismatch');
+    }
+
+    const stored = await this.artifactContent.readText(artifact.uri);
+    if (parseStoredDraftArtifact(stored).text !== input.body) {
+      throw new Error('Draft provenance mismatch');
+    }
+  }
+}
+
+function parseStoredDraftArtifact(content: string): { text: string } {
+  try {
+    const parsed = JSON.parse(content) as { text?: unknown };
+    if (typeof parsed.text === 'string') return { text: parsed.text };
+  } catch {
+    // fall through to the provenance error below
+  }
+  throw new Error('Draft provenance mismatch');
 }
 
 function toApprovalSummary(approval: MemoryApprovalRequest): AcceptDraftResult['approvals'][number] {
