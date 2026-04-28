@@ -89,6 +89,41 @@ export interface StartAgentOrchestrationInput {
   };
 }
 
+export type PreparedAgentOrchestrationRunStatus = 'Prepared' | 'Cancelled';
+
+export interface PreparedAgentOrchestrationRun {
+  id: string;
+  projectId: EntityId<'project'>;
+  agentRunId: EntityId<'agent_run'>;
+  status: PreparedAgentOrchestrationRunStatus;
+  confirmationRequired: boolean;
+  provider: {
+    provider: string;
+    model: string;
+    isExternal: boolean;
+    secretConfigured: boolean;
+  };
+  budgetEstimate: {
+    inputTokens: number;
+    outputTokens: number;
+    estimatedCostUsd: number;
+    maxRunCostUsd?: number;
+  };
+  warnings: string[];
+  blockingReasons: string[];
+  expiresAt: string;
+  contextPack: ContextPack;
+}
+
+export interface ExecutePreparedAgentOrchestrationInput {
+  confirmed: boolean;
+  confirmedBy?: string;
+}
+
+export interface CancelPreparedAgentOrchestrationInput {
+  cancelledBy?: string;
+}
+
 export interface AgentOrchestrationResult {
   orchestrationRunId: string;
   job: DurableJob;
@@ -101,7 +136,30 @@ export interface AgentOrchestrationResult {
 
 export interface AgentOrchestrationService {
   start(input: StartAgentOrchestrationInput): Promise<AgentOrchestrationResult>;
+  prepare(input: StartAgentOrchestrationInput): Promise<PreparedAgentOrchestrationRun>;
+  executePrepared(preparedRunId: string, input: ExecutePreparedAgentOrchestrationInput): Promise<AgentOrchestrationResult>;
+  cancelPrepared(preparedRunId: string, input?: CancelPreparedAgentOrchestrationInput): Promise<PreparedAgentOrchestrationRun>;
   findById(id: string): Promise<AgentOrchestrationResult | null>;
+}
+
+export interface AgentOrchestrationSendInspection {
+  provider: string;
+  model: string;
+  isExternal: boolean;
+  secretConfigured: boolean;
+  budgetEstimate: PreparedAgentOrchestrationRun['budgetEstimate'];
+  warnings: string[];
+  blockingReasons: string[];
+}
+
+export interface AgentOrchestrationProviderRuntime {
+  createGateway(input: { promptVersionId: string; allowExternalModel?: boolean }): LlmGateway | Promise<LlmGateway>;
+  inspectSend(input: {
+    promptVersionId: string;
+    prompt: string;
+    allowExternalModel?: boolean;
+    defaultMaxOutputTokens?: number;
+  }): Promise<AgentOrchestrationSendInspection>;
 }
 
 export class AgentOrchestrationError extends Error {
@@ -136,9 +194,11 @@ export function createDefaultAgentOrchestrationService(stores: AgentOrchestratio
 
 export function createAgentOrchestrationService(
   stores: AgentOrchestrationStores,
-  createGateway: (input: { promptVersionId: string; allowExternalModel?: boolean }) => LlmGateway | Promise<LlmGateway>
+  providerRuntime:
+    | AgentOrchestrationProviderRuntime
+    | ((input: { promptVersionId: string; allowExternalModel?: boolean }) => LlmGateway | Promise<LlmGateway>)
 ): AgentOrchestrationService {
-  return new PersistentAgentOrchestrationService(stores, createGateway);
+  return new PersistentAgentOrchestrationService(stores, normalizeProviderRuntime(providerRuntime));
 }
 
 class PersistentAgentOrchestrationService implements AgentOrchestrationService {
@@ -146,7 +206,7 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
 
   constructor(
     private readonly stores: AgentOrchestrationStores,
-    private readonly createGateway: (input: { promptVersionId: string; allowExternalModel?: boolean }) => LlmGateway | Promise<LlmGateway>
+    private readonly providerRuntime: AgentOrchestrationProviderRuntime
   ) {}
 
   async start(input: StartAgentOrchestrationInput): Promise<AgentOrchestrationResult> {
@@ -161,6 +221,18 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
     }
 
     const promptVersionId = input.promptVersionId ?? 'prompt_default';
+    const directInspection = await this.providerRuntime.inspectSend({
+      promptVersionId,
+      prompt: input.taskGoal,
+      allowExternalModel: project.externalModelPolicy !== 'Disabled'
+    });
+    if (directInspection.isExternal && project.externalModelPolicy === 'Disabled') {
+      throw new AgentOrchestrationError('External model use is disabled for this project', 403);
+    }
+    if (directInspection.isExternal) {
+      throw new AgentOrchestrationError('Pre-send inspection is required for external orchestration runs', 409);
+    }
+
     const job = createDurableJob({
       workflowType: input.workflowType,
       payload: {
@@ -213,7 +285,7 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
         riskLevel: input.riskLevel,
         outputSchema: input.outputSchema
       });
-      const gateway = await this.createGateway({
+      const gateway = await this.providerRuntime.createGateway({
         promptVersionId,
         allowExternalModel: project.externalModelPolicy !== 'Disabled'
       });
@@ -323,6 +395,261 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
     }
   }
 
+  async prepare(input: StartAgentOrchestrationInput): Promise<PreparedAgentOrchestrationRun> {
+    const project = await this.stores.projects.findById(input.projectId);
+    if (!project) {
+      throw new AgentOrchestrationError('Project not found', 404);
+    }
+    try {
+      assertAgentCanRunTask(input.agentRole, input.taskType);
+    } catch (error) {
+      throw new AgentOrchestrationError(error instanceof Error ? error.message : 'Invalid agent task', 400);
+    }
+
+    const promptVersionId = input.promptVersionId ?? 'prompt_default';
+    const baseContextPack =
+      this.stores.contextBuildService
+        ? await this.stores.contextBuildService.build({
+            projectId: input.projectId,
+            taskGoal: input.taskGoal,
+            agentRole: input.agentRole,
+            riskLevel: input.riskLevel,
+            query: input.retrieval?.query ?? input.taskGoal,
+            maxContextItems: input.retrieval?.maxContextItems,
+            maxSectionChars: input.retrieval?.maxSectionChars
+          })
+        : createContextPack({
+            taskGoal: input.taskGoal,
+            agentRole: input.agentRole,
+            riskLevel: input.riskLevel,
+            sections: [],
+            citations: [],
+            exclusions: [],
+            warnings: [],
+            retrievalTrace: [`orchestration:${input.taskType}`]
+          });
+
+    const agentRun = createAgentRun({
+      agentName: input.agentRole,
+      taskType: input.taskType,
+      workflowType: input.workflowType,
+      promptVersionId,
+      contextPackId: baseContextPack.id
+    });
+    const contextPack = await this.attachContextPackArtifact(baseContextPack, agentRun.id);
+    await this.stores.contextPacks.save(contextPack);
+    await this.stores.agentRuns.save({ ...agentRun, status: 'Queued' });
+
+    const inspection = await this.providerRuntime.inspectSend({
+      promptVersionId,
+      prompt: buildPrompt(input, contextPack),
+      allowExternalModel: project.externalModelPolicy !== 'Disabled',
+      defaultMaxOutputTokens: 1024
+    });
+    const job = transitionJob(
+      createDurableJob({
+        workflowType: 'orchestration.prepare',
+        payload: {
+          projectId: input.projectId,
+          input,
+          contextPackId: contextPack.id,
+          agentRunId: agentRun.id,
+          provider: inspection.provider,
+          model: inspection.model,
+          isExternal: inspection.isExternal,
+          secretConfigured: inspection.secretConfigured,
+          budgetEstimate: inspection.budgetEstimate,
+          warnings: inspection.warnings,
+          blockingReasons: inspection.blockingReasons,
+          expiresAt: expiresAt(),
+          createdAt: new Date().toISOString()
+        }
+      }),
+      'Paused'
+    );
+    await this.stores.durableJobs.save(job);
+
+    return this.toPreparedAgentOrchestrationRun(job, contextPack);
+  }
+
+  async executePrepared(
+    preparedRunId: string,
+    input: ExecutePreparedAgentOrchestrationInput
+  ): Promise<AgentOrchestrationResult> {
+    if (!input.confirmed) {
+      throw new AgentOrchestrationError('Prepared orchestration run requires confirmation', 409);
+    }
+
+    const { job, payload, contextPack } = await this.loadPreparedJob(preparedRunId);
+    if (job.status === 'Cancelled') {
+      throw new AgentOrchestrationError('Prepared orchestration run is cancelled', 409);
+    }
+    if (job.status !== 'Paused') {
+      throw new AgentOrchestrationError('Prepared orchestration run is not executable', 409);
+    }
+    if (payload.expiresAt < new Date().toISOString()) {
+      throw new AgentOrchestrationError('Prepared orchestration run is stale', 409);
+    }
+
+    const project = await this.stores.projects.findById(payload.projectId);
+    if (!project) {
+      throw new AgentOrchestrationError('Project not found', 404);
+    }
+
+    const promptVersionId = payload.input.promptVersionId ?? 'prompt_default';
+    const inspection = await this.providerRuntime.inspectSend({
+      promptVersionId,
+      prompt: buildPrompt(payload.input, contextPack),
+      allowExternalModel: project.externalModelPolicy !== 'Disabled',
+      defaultMaxOutputTokens: 1024
+    });
+    if (inspection.provider !== payload.provider || inspection.model !== payload.model) {
+      throw new AgentOrchestrationError('Prepared orchestration run is stale', 409);
+    }
+    if (inspection.blockingReasons.length > 0) {
+      const reason = inspection.blockingReasons[0] ?? 'Prepared orchestration run has blocking warnings';
+      throw new AgentOrchestrationError(reason, reason === 'External model use is disabled for this project' ? 403 : 409);
+    }
+
+    const contract = createTaskContract({
+      projectId: payload.input.projectId,
+      taskType: payload.input.taskType,
+      agentRole: payload.input.agentRole,
+      riskLevel: payload.input.riskLevel,
+      outputSchema: payload.input.outputSchema
+    });
+    const preparedAgentRun: AgentRun = {
+      id: payload.agentRunId,
+      agentName: payload.input.agentRole,
+      taskType: payload.input.taskType,
+      workflowType: payload.input.workflowType,
+      promptVersionId,
+      contextPackId: contextPack.id,
+      status: 'Running',
+      createdAt: contextPack.createdAt
+    };
+    const runningJob = transitionJob(job, 'Running');
+    await this.stores.durableJobs.save(runningJob);
+    await this.stores.agentRuns.save(preparedAgentRun);
+
+    let gateway: LlmGateway | null = null;
+    let generated: { value: Record<string, unknown> };
+    try {
+      gateway = await this.providerRuntime.createGateway({
+        promptVersionId,
+        allowExternalModel: project.externalModelPolicy !== 'Disabled'
+      });
+      generated = await gateway.generateStructured<Record<string, unknown>>({
+        prompt: buildPrompt(payload.input, contextPack),
+        schemaName: payload.input.outputSchema,
+        model: payload.input.model,
+        validate: isRecord
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Agent orchestration failed';
+      const failedAgentRun: AgentRun = { ...preparedAgentRun, status: 'Failed' };
+      await this.stores.agentRuns.save(failedAgentRun);
+      const llmCalls = gateway ? await this.persistLlmCalls(gateway, failedAgentRun.id) : [];
+      const workflowRun = await this.runner.run(contract, [
+        { name: 'create_context_pack', artifactIds: [contextPack.artifactId ?? contextPack.id], status: 'Succeeded' },
+        { name: 'create_agent_run', artifactIds: [failedAgentRun.id], status: 'Succeeded' },
+        {
+          name: 'generate_structured_output',
+          artifactIds: [],
+          status: 'Failed',
+          error: message
+        },
+        { name: 'persist_llm_call_log', artifactIds: llmCalls.map((record) => record.id), status: 'Succeeded' }
+      ]);
+      await this.stores.workflowRuns.save(workflowRun);
+      await this.stores.durableJobs.save({
+        ...transitionJob(runningJob, 'Failed'),
+        payload: {
+          ...runningJob.payload,
+          workflowRunId: workflowRun.id,
+          error: message,
+          output: null
+        }
+      });
+      throw new AgentOrchestrationError(
+        message,
+        error instanceof AgentOrchestrationError
+          ? error.statusCode
+          : message === 'External model use is disabled for this project'
+            ? 403
+            : 500,
+        runningJob.id
+      );
+    }
+
+    const succeededAgentRun: AgentRun = { ...preparedAgentRun, status: 'Succeeded' };
+    await this.stores.agentRuns.save(succeededAgentRun);
+    const llmCalls = await this.persistLlmCalls(gateway, succeededAgentRun.id);
+    const workflowRun = await this.runner.run(contract, [
+      { name: 'create_context_pack', artifactIds: [contextPack.artifactId ?? contextPack.id], status: 'Succeeded' },
+      { name: 'create_agent_run', artifactIds: [succeededAgentRun.id], status: 'Succeeded' },
+      { name: 'generate_structured_output', artifactIds: [], status: 'Succeeded' },
+      { name: 'persist_llm_call_log', artifactIds: llmCalls.map((record) => record.id), status: 'Succeeded' }
+    ]);
+    await this.stores.workflowRuns.save(workflowRun);
+
+    const succeededJob: DurableJob = {
+      ...transitionJob(runningJob, 'Succeeded'),
+      payload: {
+        ...runningJob.payload,
+        confirmedBy: input.confirmedBy,
+        confirmedAt: new Date().toISOString(),
+        contextPackId: contextPack.id,
+        agentRunId: succeededAgentRun.id,
+        workflowRunId: workflowRun.id,
+        output: generated.value
+      }
+    };
+    await this.stores.durableJobs.save(succeededJob);
+
+    return {
+      orchestrationRunId: succeededJob.id,
+      job: succeededJob,
+      contextPack,
+      agentRun: succeededAgentRun,
+      workflowRun,
+      llmCalls,
+      output: generated.value
+    };
+  }
+
+  async cancelPrepared(
+    preparedRunId: string,
+    input: CancelPreparedAgentOrchestrationInput = {}
+  ): Promise<PreparedAgentOrchestrationRun> {
+    const { job, payload, contextPack } = await this.loadPreparedJob(preparedRunId);
+    if (job.status !== 'Paused') {
+      throw new AgentOrchestrationError('Prepared orchestration run is not cancellable', 409);
+    }
+
+    const cancelled = transitionJob(job, 'Cancelled');
+    await this.stores.durableJobs.save({
+      ...cancelled,
+      payload: {
+        ...job.payload,
+        cancelledBy: input.cancelledBy,
+        cancelledAt: new Date().toISOString()
+      }
+    });
+    await this.stores.agentRuns.save({
+      id: payload.agentRunId,
+      agentName: payload.input.agentRole,
+      taskType: payload.input.taskType,
+      workflowType: payload.input.workflowType,
+      promptVersionId: payload.input.promptVersionId ?? 'prompt_default',
+      contextPackId: contextPack.id,
+      status: 'Cancelled',
+      createdAt: contextPack.createdAt
+    });
+
+    return this.toPreparedAgentOrchestrationRun(cancelled, contextPack);
+  }
+
   async findById(id: string): Promise<AgentOrchestrationResult | null> {
     const job = await this.stores.durableJobs.findById(id);
     if (!job) return null;
@@ -385,6 +712,100 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
 
     return { ...contextPack, artifactId: artifact.id };
   }
+
+  private async loadPreparedJob(preparedRunId: string): Promise<{
+    job: DurableJob;
+    payload: PreparedAgentOrchestrationPayload;
+    contextPack: ContextPack;
+  }> {
+    const job = await this.stores.durableJobs.findById(preparedRunId);
+    if (!job || job.workflowType !== 'orchestration.prepare') {
+      throw new AgentOrchestrationError('Prepared orchestration run not found', 404);
+    }
+
+    const payload = toPreparedPayload(job.payload);
+    const contextPack = await this.stores.contextPacks.findById(payload.contextPackId);
+    if (!contextPack) {
+      throw new AgentOrchestrationError('Prepared orchestration run context not found', 409);
+    }
+
+    return { job, payload, contextPack };
+  }
+
+  private toPreparedAgentOrchestrationRun(
+    job: DurableJob,
+    contextPack: ContextPack
+  ): PreparedAgentOrchestrationRun {
+    const payload = toPreparedPayload(job.payload);
+    return {
+      id: job.id,
+      projectId: payload.projectId,
+      agentRunId: payload.agentRunId,
+      status: job.status === 'Cancelled' ? 'Cancelled' : 'Prepared',
+      confirmationRequired: true,
+      provider: {
+        provider: payload.provider,
+        model: payload.model,
+        isExternal: payload.isExternal,
+        secretConfigured: payload.secretConfigured
+      },
+      budgetEstimate: payload.budgetEstimate,
+      warnings: payload.warnings,
+      blockingReasons: payload.blockingReasons,
+      expiresAt: payload.expiresAt,
+      contextPack
+    };
+  }
+}
+
+interface PreparedAgentOrchestrationPayload {
+  projectId: EntityId<'project'>;
+  input: StartAgentOrchestrationInput;
+  contextPackId: EntityId<'context_pack'>;
+  agentRunId: EntityId<'agent_run'>;
+  provider: string;
+  model: string;
+  isExternal: boolean;
+  secretConfigured: boolean;
+  budgetEstimate: PreparedAgentOrchestrationRun['budgetEstimate'];
+  warnings: string[];
+  blockingReasons: string[];
+  expiresAt: string;
+}
+
+function toPreparedPayload(payload: DurableJob['payload']): PreparedAgentOrchestrationPayload {
+  return payload as unknown as PreparedAgentOrchestrationPayload;
+}
+
+function expiresAt(): string {
+  return new Date(Date.now() + 10 * 60 * 1000).toISOString();
+}
+
+function normalizeProviderRuntime(
+  providerRuntime:
+    | AgentOrchestrationProviderRuntime
+    | ((input: { promptVersionId: string; allowExternalModel?: boolean }) => LlmGateway | Promise<LlmGateway>)
+): AgentOrchestrationProviderRuntime {
+  if (typeof providerRuntime !== 'function') return providerRuntime;
+
+  return {
+    createGateway: providerRuntime,
+    async inspectSend() {
+      return {
+        provider: 'fake',
+        model: 'fake-model',
+        isExternal: false,
+        secretConfigured: true,
+        budgetEstimate: {
+          inputTokens: 0,
+          outputTokens: 0,
+          estimatedCostUsd: 0
+        },
+        warnings: [],
+        blockingReasons: []
+      };
+    }
+  };
 }
 
 function buildPrompt(input: StartAgentOrchestrationInput, contextPack: ContextPack): string {

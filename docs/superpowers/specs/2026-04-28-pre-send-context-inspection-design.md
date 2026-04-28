@@ -4,7 +4,7 @@ Date: 2026-04-28
 
 ## Purpose
 
-Let authors inspect the exact context, warnings, and estimated provider spend before any external model call leaves the local workspace. This spike documents the intended route split and validation work. As of the local remaining-gap completion batch, the writing route split and manuscript editor confirmation UX are implemented locally; orchestration prepare/execute remains deferred until its route split is validated separately.
+Let authors inspect the exact context, warnings, and estimated provider spend before any external model call leaves the local workspace. This spike documents the intended route split and validation work. As of the local remaining-gap completion batch, the writing route split, manuscript editor confirmation UX, and orchestration prepare/execute route split are implemented locally with fake/local provider compatibility. Production provider validation and indexed pending-send storage remain deferred.
 
 The design applies to external providers only. Fake and local providers should remain single-step by default so deterministic automation, local rehearsals, and no-secret test paths do not gain unnecessary confirmation state. A caller may explicitly request the two-phase path for fake/local providers when testing the confirmation UX, but that should be opt-in.
 
@@ -96,4 +96,4 @@ Projects marked with external model use disabled must fail closed:
 
 ## Deferred Scope
 
-The writing-route slice is implemented locally with `prepare`, `execute`, and `cancel` subroutes plus manuscript editor confirmation state. Orchestration prepare/execute, indexed pending-send cleanup, and provider-specific production validation remain deferred. The first local implementation stores prepared writing sends in durable job payloads to avoid a migration; a future production hardening pass should add indexed pending-send storage and retention policy if this flow becomes high volume.
+The writing-route slice is implemented locally with `prepare`, `execute`, and `cancel` subroutes plus manuscript editor confirmation state. The orchestration slice now also has local `prepare`, `execute`, and `cancel` routes, Agent Room confirmation controls, and real-local E2E coverage using the fake provider. Indexed pending-send cleanup and provider-specific production validation remain deferred. The first local implementation stores prepared sends in durable job payloads to avoid a migration; a future production hardening pass should add indexed pending-send storage and retention policy if this flow becomes high volume.

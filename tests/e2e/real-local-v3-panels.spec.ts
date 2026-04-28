@@ -145,6 +145,48 @@ test('real local API drives agent room settings decision queue and search withou
   await page.getByRole('button', { name: 'Replay run' }).click();
   await expect(page.getByLabel('Agent action result')).toContainText('Action replay completed.');
 
+  const confirmOrchestration = page.getByRole('button', { name: 'Confirm orchestration send' });
+  await expect(confirmOrchestration).toBeDisabled();
+  const prepareOrchestrationResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes('/orchestration/runs/prepare') && response.request().method() === 'POST'
+  );
+  await page.getByRole('button', { name: 'Inspect orchestration send' }).click();
+  const prepareOrchestrationResponse = await prepareOrchestrationResponsePromise;
+  expect(prepareOrchestrationResponse.status(), await prepareOrchestrationResponse.text()).toBe(201);
+  const preparedOrchestration = (await prepareOrchestrationResponse.json()) as {
+    id: string;
+    provider: { provider: string; model: string };
+    budgetEstimate: { inputTokens: number; outputTokens: number };
+    contextPack: {
+      id: string;
+      sections: Array<{ content: string }>;
+      exclusions: string[];
+      warnings: string[];
+      retrievalTrace: string[];
+    };
+    warnings: string[];
+  };
+  const orchestrationInspection = page.getByLabel('Orchestration pre-send inspection');
+  await expect(orchestrationInspection).toContainText(preparedOrchestration.contextPack.id);
+  await expect(orchestrationInspection).toContainText(
+    `${preparedOrchestration.provider.provider} / ${preparedOrchestration.provider.model}`
+  );
+  await expect(orchestrationInspection).toContainText(`${preparedOrchestration.budgetEstimate.inputTokens} input`);
+  await expect(orchestrationInspection).toContainText(`${preparedOrchestration.budgetEstimate.outputTokens} output`);
+  await expect(orchestrationInspection).toContainText(firstInspectionText(preparedOrchestration.contextPack));
+  await expect(confirmOrchestration).toBeEnabled();
+
+  const executeOrchestrationResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes(`/orchestration/runs/${preparedOrchestration.id}/execute`) &&
+      response.request().method() === 'POST'
+  );
+  await confirmOrchestration.click();
+  const executeOrchestrationResponse = await executeOrchestrationResponsePromise;
+  expect(executeOrchestrationResponse.status(), await executeOrchestrationResponse.text()).toBe(201);
+  await expect(page.getByLabel('Orchestration execution result')).toContainText('Deterministic chapter plan');
+
   await expect(page.getByRole('heading', { name: 'Provider Defaults' })).toBeVisible();
   const providerDefaults = page.getByRole('region', { name: 'Provider defaults', exact: true });
   await providerDefaults.getByLabel('Provider', { exact: true }).fill('fake');
@@ -214,6 +256,20 @@ async function createProjectWithChapter(request: APIRequestContext): Promise<{
     manuscriptId: chapter.chapter.manuscriptId,
     versionId: chapter.version.id
   };
+}
+
+function firstInspectionText(contextPack: {
+  sections: Array<{ content: string }>;
+  exclusions: string[];
+  warnings: string[];
+  retrievalTrace: string[];
+}): string {
+  return [
+    contextPack.sections.find((section) => section.content.length > 0)?.content,
+    contextPack.exclusions[0],
+    contextPack.warnings[0],
+    contextPack.retrievalTrace[0]
+  ].find((value): value is string => typeof value === 'string' && value.length > 0) ?? '';
 }
 
 async function ensureFirstProjectWithWritableChapter(request: APIRequestContext): Promise<{

@@ -1,7 +1,14 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createApiClient, type AgentRoomApiClient, type AgentRoomRunDetail } from '../api/client';
+import {
+  createApiClient,
+  type AgentRoomApiClient,
+  type AgentRoomRunDetail,
+  type ApiClient,
+  type OrchestrationApiClient,
+  type OrchestrationRunInput
+} from '../api/client';
 import { AgentRoom } from '../components/AgentRoom';
 
 describe('AgentRoom', () => {
@@ -68,6 +75,43 @@ describe('AgentRoom', () => {
     expect(runAction).toHaveBeenCalledWith('agent_run_editor', 'retry');
   });
 
+  it('prepares confirms and cancels an orchestration send inspection', async () => {
+    const client = mockAgentRoomClientWithOrchestration();
+    const prepare = vi.spyOn(client, 'prepareOrchestrationRun');
+    const execute = vi.spyOn(client, 'executePreparedOrchestrationRun');
+    const cancel = vi.spyOn(client, 'cancelPreparedOrchestrationRun');
+
+    render(<AgentRoom client={client} />);
+
+    await screen.findByRole('heading', { name: 'Writer Agent' });
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect orchestration send' }));
+
+    const inspection = await screen.findByLabelText('Orchestration pre-send inspection');
+    expect(inspection).toHaveTextContent('openai / gpt-test');
+    expect(inspection).toHaveTextContent('context_pack_orchestration_prepared');
+    expect(inspection).toHaveTextContent('125 input');
+    expect(inspection).toHaveTextContent('Mira promises to return.');
+    expect(inspection).toHaveTextContent('restricted_source_1');
+    expect(inspection).toHaveTextContent('External model call requires pre-send confirmation');
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'project_api', agentRole: 'Planner' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm orchestration send' }));
+    expect(await screen.findByLabelText('Orchestration execution result')).toHaveTextContent('Prepared chapter plan');
+    expect(execute).toHaveBeenCalledWith('job_orchestration_prepared_1', {
+      confirmed: true,
+      confirmedBy: 'operator'
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect orchestration send' }));
+    await screen.findByLabelText('Orchestration pre-send inspection');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel orchestration send' }));
+
+    expect(cancel).toHaveBeenCalledWith('job_orchestration_prepared_1', { cancelledBy: 'operator' });
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Orchestration pre-send inspection')).not.toBeInTheDocument();
+    });
+  });
+
   it('shows an empty state when there are no agent runs', async () => {
     render(<AgentRoom client={mockAgentRoomClient({ empty: true })} />);
 
@@ -88,6 +132,15 @@ describe('agent room API client helpers', () => {
       if (path === '/api/agent-room/runs/agent_run_room/actions/cancel' && init?.method === 'POST') {
         return jsonResponse({ runId: 'agent_run_room', action: 'cancel', status: 'accepted' });
       }
+      if (path === '/api/orchestration/runs/prepare' && init?.method === 'POST') {
+        return jsonResponse(preparedOrchestrationRun);
+      }
+      if (path === '/api/orchestration/runs/job_orchestration_prepared_1/execute' && init?.method === 'POST') {
+        return jsonResponse(orchestrationExecutionResult);
+      }
+      if (path === '/api/orchestration/runs/job_orchestration_prepared_1/cancel' && init?.method === 'POST') {
+        return jsonResponse({ ...preparedOrchestrationRun, status: 'Cancelled' });
+      }
       return jsonResponse({ error: 'Not found' }, false, 404);
     });
     const client = createApiClient({ baseUrl: '/api', fetchImpl });
@@ -95,17 +148,33 @@ describe('agent room API client helpers', () => {
     const runs = await client.listAgentRoomRuns();
     const detail = await client.getAgentRoomRun('agent_run_room');
     const action = await client.runAgentRoomAction('agent_run_room', 'cancel');
+    const prepared = await client.prepareOrchestrationRun(orchestrationInput('project_1'));
+    const executed = await client.executePreparedOrchestrationRun('job_orchestration_prepared_1', {
+      confirmed: true,
+      confirmedBy: 'vitest'
+    });
+    const cancelled = await client.cancelPreparedOrchestrationRun('job_orchestration_prepared_1', {
+      cancelledBy: 'vitest'
+    });
 
     expect(runs).toEqual([expect.objectContaining({ id: 'agent_run_room', allowedActions: ['cancel'] })]);
     expect(detail.contextPack?.citations).toEqual([{ sourceId: 'fact_key_lantern', quote: 'hidden in the lantern' }]);
     expect(detail.costSummary.totalCostUsd).toBe(0.013);
     expect(action).toEqual({ runId: 'agent_run_room', action: 'cancel', status: 'accepted' });
+    expect(prepared).toMatchObject({ id: 'job_orchestration_prepared_1', status: 'Prepared' });
+    expect(executed.output).toEqual({ title: 'Prepared chapter plan', nextAction: 'Review with author' });
+    expect(cancelled).toMatchObject({ id: 'job_orchestration_prepared_1', status: 'Cancelled' });
     expect(fetchImpl).toHaveBeenCalledWith('/api/agent-room/runs');
     expect(fetchImpl).toHaveBeenCalledWith('/api/agent-room/runs/agent_run_room');
     expect(fetchImpl).toHaveBeenCalledWith('/api/agent-room/runs/agent_run_room/actions/cancel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({})
+    });
+    expect(fetchImpl).toHaveBeenCalledWith('/api/orchestration/runs/prepare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(orchestrationInput('project_1'))
     });
   });
 });
@@ -128,6 +197,21 @@ function mockAgentRoomClient(
       if (options.rejectAction === action) throw new Error('Retry failed');
       return { runId, action, status: 'accepted' };
     }
+  };
+}
+
+type AgentRoomOrchestrationFixture = AgentRoomApiClient &
+  Pick<ApiClient, 'listProjects'> &
+  OrchestrationApiClient;
+
+function mockAgentRoomClientWithOrchestration(): AgentRoomOrchestrationFixture {
+  return {
+    ...mockAgentRoomClient(),
+    listProjects: async () => [{ id: 'project_api', title: 'API Project' }],
+    startOrchestrationRun: async () => orchestrationExecutionResult,
+    prepareOrchestrationRun: async () => preparedOrchestrationRun,
+    executePreparedOrchestrationRun: async () => orchestrationExecutionResult,
+    cancelPreparedOrchestrationRun: async () => ({ ...preparedOrchestrationRun, status: 'Cancelled' as const })
   };
 }
 
@@ -243,6 +327,88 @@ const editorRunDetail: AgentRoomRunDetail = {
     agentRole: 'Editor Agent'
   },
   approvals: []
+};
+
+function orchestrationInput(projectId: string): OrchestrationRunInput {
+  return {
+    projectId,
+    workflowType: 'chapter_creation',
+    taskType: 'chapter_planning',
+    agentRole: 'Planner',
+    taskGoal: 'Plan the next inspected chapter',
+    riskLevel: 'Medium',
+    outputSchema: 'ChapterPlan',
+    promptVersionId: 'prompt_chapter_plan_v1',
+    retrieval: {
+      query: 'next inspected chapter',
+      maxContextItems: 4,
+      maxSectionChars: 1200
+    }
+  };
+}
+
+const preparedOrchestrationRun = {
+  id: 'job_orchestration_prepared_1',
+  projectId: 'project_api',
+  agentRunId: 'agent_run_orchestration_prepared_1',
+  status: 'Prepared' as const,
+  confirmationRequired: true,
+  provider: {
+    provider: 'openai',
+    model: 'gpt-test',
+    isExternal: true,
+    secretConfigured: true
+  },
+  budgetEstimate: {
+    inputTokens: 125,
+    outputTokens: 1024,
+    estimatedCostUsd: 0.0012,
+    maxRunCostUsd: 0.25
+  },
+  warnings: ['External model call requires pre-send confirmation'],
+  blockingReasons: [],
+  expiresAt: '2026-04-28T01:00:00.000Z',
+  contextPack: {
+    id: 'context_pack_orchestration_prepared',
+    taskGoal: 'Plan the next inspected chapter',
+    agentRole: 'Planner',
+    riskLevel: 'Medium',
+    sections: [{ name: 'retrieved_context', content: 'Mira promises to return.' }],
+    citations: [{ sourceId: 'canon_1', quote: 'Mira promises to return.' }],
+    exclusions: ['restricted_source_1'],
+    warnings: ['Restricted source omitted.'],
+    retrievalTrace: ['query:next inspected chapter'],
+    createdAt: '2026-04-28T00:00:00.000Z'
+  }
+};
+
+const orchestrationExecutionResult = {
+  orchestrationRunId: 'job_orchestration_prepared_1',
+  job: {
+    id: 'job_orchestration_prepared_1',
+    workflowType: 'orchestration.prepare',
+    status: 'Succeeded',
+    retryCount: 0,
+    lineage: ['job_orchestration_prepared_1']
+  },
+  contextPack: preparedOrchestrationRun.contextPack,
+  agentRun: {
+    id: 'agent_run_orchestration_prepared_1',
+    agentName: 'Planner',
+    taskType: 'chapter_planning',
+    workflowType: 'chapter_creation',
+    promptVersionId: 'prompt_chapter_plan_v1',
+    status: 'Succeeded',
+    jobStatus: 'Succeeded',
+    createdAt: '2026-04-28T00:00:00.000Z',
+    totalCostUsd: 0.0012,
+    pendingApprovalCount: 0,
+    allowedActions: ['replay'],
+    contextPackId: 'context_pack_orchestration_prepared'
+  },
+  workflowRun: null,
+  llmCalls: [],
+  output: { title: 'Prepared chapter plan', nextAction: 'Review with author' }
 };
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {

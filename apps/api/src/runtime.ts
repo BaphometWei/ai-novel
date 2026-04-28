@@ -199,7 +199,7 @@ export async function createPersistentApiRuntime(
       workflowRuns,
       durableJobs
     },
-    providerRuntime.createGateway
+    providerRuntime
   );
   const agentRoom = createPersistentAgentRoomRepositories({
     agentRuns,

@@ -356,6 +356,60 @@ export interface AgentRoomActionResult {
   message?: string;
 }
 
+export type OrchestrationRiskLevel = 'Low' | 'Medium' | 'High' | 'Blocking';
+
+export interface OrchestrationRunInput {
+  projectId: string;
+  workflowType: string;
+  taskType: string;
+  agentRole: string;
+  taskGoal: string;
+  riskLevel: OrchestrationRiskLevel;
+  outputSchema: string;
+  promptVersionId?: string;
+  model?: string;
+  contextSections?: Array<{ name: string; content: string }>;
+  retrieval?: {
+    query: string;
+    maxContextItems?: number;
+    maxSectionChars?: number;
+  };
+}
+
+export interface PreparedAgentOrchestrationRun {
+  id: string;
+  projectId: string;
+  agentRunId: string;
+  status: 'Prepared' | 'Cancelled';
+  confirmationRequired: boolean;
+  provider: {
+    provider: string;
+    model: string;
+    isExternal: boolean;
+    secretConfigured: boolean;
+  };
+  budgetEstimate: {
+    inputTokens: number;
+    outputTokens: number;
+    estimatedCostUsd: number;
+    maxRunCostUsd?: number;
+  };
+  warnings: string[];
+  blockingReasons: string[];
+  expiresAt: string;
+  contextPack: AgentRoomContextPack;
+}
+
+export interface AgentOrchestrationRunResult {
+  orchestrationRunId: string;
+  job: Record<string, unknown> | null;
+  contextPack: AgentRoomContextPack | null;
+  agentRun: Record<string, unknown> | null;
+  workflowRun: Record<string, unknown> | null;
+  llmCalls: AgentRoomCostCall[];
+  output: unknown;
+}
+
 export interface AgentRoomRunDetail {
   run: AgentRoomRunSummary;
   workflowRun?: { id: string; taskContractId: string; steps: unknown[] } | null;
@@ -619,6 +673,19 @@ export interface AgentRoomApiClient {
   listAgentRoomRuns(): Promise<AgentRoomRunSummary[]>;
   getAgentRoomRun(runId: string): Promise<AgentRoomRunDetail>;
   runAgentRoomAction(runId: string, action: string): Promise<AgentRoomActionResult>;
+}
+
+export interface OrchestrationApiClient {
+  startOrchestrationRun(input: OrchestrationRunInput): Promise<AgentOrchestrationRunResult>;
+  prepareOrchestrationRun(input: OrchestrationRunInput): Promise<PreparedAgentOrchestrationRun>;
+  executePreparedOrchestrationRun(
+    preparedRunId: string,
+    input: { confirmed: boolean; confirmedBy?: string }
+  ): Promise<AgentOrchestrationRunResult>;
+  cancelPreparedOrchestrationRun(
+    preparedRunId: string,
+    input?: { cancelledBy?: string }
+  ): Promise<PreparedAgentOrchestrationRun>;
 }
 
 export interface ObservabilityApiClient {
@@ -1054,6 +1121,7 @@ export function createApiClient(
   RetrievalEvaluationApiClient &
   BranchRetconApiClient &
   ScheduledBackupApiClient &
+  OrchestrationApiClient &
   WritingManuscriptApiClient {
   const baseUrl = options.baseUrl ?? '';
   const fetchImpl = options.fetchImpl ?? fetch.bind(globalThis);
@@ -1136,6 +1204,30 @@ export function createApiClient(
     runAgentRoomAction: async (runId, action) =>
       adaptAgentRoomActionResult(
         await requestJson(fetchImpl, `${baseUrl}/agent-room/runs/${runId}/actions/${action}`, jsonRequest('POST', {}))
+      ),
+    startOrchestrationRun: async (input) =>
+      adaptAgentOrchestrationRunResult(
+        await requestJson(fetchImpl, `${baseUrl}/orchestration/runs`, jsonRequest('POST', input))
+      ),
+    prepareOrchestrationRun: async (input) =>
+      adaptPreparedAgentOrchestrationRun(
+        await requestJson(fetchImpl, `${baseUrl}/orchestration/runs/prepare`, jsonRequest('POST', input))
+      ),
+    executePreparedOrchestrationRun: async (preparedRunId, input) =>
+      adaptAgentOrchestrationRunResult(
+        await requestJson(
+          fetchImpl,
+          `${baseUrl}/orchestration/runs/${preparedRunId}/execute`,
+          jsonRequest('POST', input)
+        )
+      ),
+    cancelPreparedOrchestrationRun: async (preparedRunId, input = {}) =>
+      adaptPreparedAgentOrchestrationRun(
+        await requestJson(
+          fetchImpl,
+          `${baseUrl}/orchestration/runs/${preparedRunId}/cancel`,
+          jsonRequest('POST', input)
+        )
       ),
     loadObservabilitySummary: async (input) =>
       adaptProductObservabilitySummary(
@@ -2058,6 +2150,52 @@ function adaptPreparedWritingRun(value: unknown): PreparedWritingRun {
   };
 }
 
+function adaptPreparedAgentOrchestrationRun(value: unknown): PreparedAgentOrchestrationRun {
+  if (!isRecord(value) || !isRecord(value.provider) || !isRecord(value.budgetEstimate)) {
+    throw new Error('Invalid prepared orchestration response');
+  }
+
+  return {
+    id: stringOrFallback(value.id, ''),
+    projectId: stringOrFallback(value.projectId, ''),
+    agentRunId: stringOrFallback(value.agentRunId, ''),
+    status: value.status === 'Cancelled' ? 'Cancelled' : 'Prepared',
+    confirmationRequired: value.confirmationRequired !== false,
+    provider: {
+      provider: stringOrFallback(value.provider.provider, ''),
+      model: stringOrFallback(value.provider.model, ''),
+      isExternal: value.provider.isExternal === true,
+      secretConfigured: value.provider.secretConfigured === true
+    },
+    budgetEstimate: {
+      inputTokens: numberOrFallback(value.budgetEstimate.inputTokens, 0),
+      outputTokens: numberOrFallback(value.budgetEstimate.outputTokens, 0),
+      estimatedCostUsd: numberOrFallback(value.budgetEstimate.estimatedCostUsd, 0),
+      maxRunCostUsd:
+        typeof value.budgetEstimate.maxRunCostUsd === 'number' ? value.budgetEstimate.maxRunCostUsd : undefined
+    },
+    warnings: stringArrayOrEmpty(value.warnings),
+    blockingReasons: stringArrayOrEmpty(value.blockingReasons),
+    expiresAt: stringOrFallback(value.expiresAt, ''),
+    contextPack: isRecord(value.contextPack)
+      ? adaptAgentRoomContextPack(value.contextPack)
+      : emptyAgentRoomContextPack()
+  };
+}
+
+function adaptAgentOrchestrationRunResult(value: unknown): AgentOrchestrationRunResult {
+  if (!isRecord(value)) throw new Error('Invalid orchestration run response');
+  return {
+    orchestrationRunId: stringOrFallback(value.orchestrationRunId, ''),
+    job: isRecord(value.job) ? value.job : null,
+    contextPack: isRecord(value.contextPack) ? adaptAgentRoomContextPack(value.contextPack) : null,
+    agentRun: isRecord(value.agentRun) ? value.agentRun : null,
+    workflowRun: isRecord(value.workflowRun) ? value.workflowRun : null,
+    llmCalls: Array.isArray(value.llmCalls) ? value.llmCalls.filter(isRecord).map(adaptAgentRoomCostCall) : [],
+    output: value.output
+  };
+}
+
 function adaptAcceptDraftResult(value: unknown): AcceptDraftResult {
   if (!isRecord(value)) throw new Error('Invalid accept draft response');
   const approvals = Array.isArray(value.approvals) ? value.approvals.filter(isRecord) : [];
@@ -2357,6 +2495,38 @@ function adaptAgentRoomContextPack(contextPack: Record<string, unknown>): AgentR
     warnings: stringArrayOrEmpty(contextPack.warnings),
     retrievalTrace: stringArrayOrEmpty(contextPack.retrievalTrace),
     createdAt: stringOrFallback(contextPack.createdAt, '')
+  };
+}
+
+function emptyAgentRoomContextPack(): AgentRoomContextPack {
+  return {
+    id: '',
+    taskGoal: '',
+    agentRole: '',
+    riskLevel: '',
+    sections: [],
+    citations: [],
+    exclusions: [],
+    warnings: [],
+    retrievalTrace: [],
+    createdAt: ''
+  };
+}
+
+function adaptAgentRoomCostCall(value: Record<string, unknown>): AgentRoomCostCall {
+  return {
+    id: stringOrFallback(value.id, ''),
+    promptVersionId: stringOrFallback(value.promptVersionId, ''),
+    provider: stringOrFallback(value.provider, ''),
+    model: stringOrFallback(value.model, ''),
+    schemaName: typeof value.schemaName === 'string' ? value.schemaName : undefined,
+    inputTokens: numberOrFallback(value.inputTokens, 0),
+    outputTokens: numberOrFallback(value.outputTokens, 0),
+    durationMs: numberOrFallback(value.durationMs, 0),
+    estimatedCostUsd: numberOrFallback(value.estimatedCostUsd, 0),
+    retryCount: numberOrFallback(value.retryCount, 0),
+    status: stringOrFallback(value.status, ''),
+    createdAt: stringOrFallback(value.createdAt, '')
   };
 }
 

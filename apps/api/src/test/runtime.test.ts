@@ -50,7 +50,7 @@ describe('persistent API runtime', () => {
     runtime.database.client.close();
   });
 
-  it('runs persisted orchestration through configured OpenAI provider settings without exposing the secret', async () => {
+  it('requires inspection for configured OpenAI orchestration and executes the prepared run without exposing the secret', async () => {
     const rawApiKey = 'sk-runtime-secret';
     const seenRequests: Array<{ url: string; headers: Headers; body: unknown }> = [];
     const runtime = await createPersistentApiRuntime(':memory:', {
@@ -91,7 +91,7 @@ describe('persistent API runtime', () => {
     });
     const project = projectResponse.json();
 
-    const response = await runtime.app.inject({
+    const directResponse = await runtime.app.inject({
       method: 'POST',
       url: '/orchestration/runs',
       payload: {
@@ -107,6 +107,54 @@ describe('persistent API runtime', () => {
       }
     });
 
+    expect(directResponse.statusCode).toBe(409);
+    expect(directResponse.json()).toEqual({
+      error: 'Pre-send inspection is required for external orchestration runs',
+      requiresInspection: true
+    });
+    expect(seenRequests).toHaveLength(0);
+
+    const prepareResponse = await runtime.app.inject({
+      method: 'POST',
+      url: '/orchestration/runs/prepare',
+      payload: {
+        projectId: project.id,
+        workflowType: 'chapter_creation',
+        taskType: 'chapter_planning',
+        agentRole: 'Planner',
+        taskGoal: 'Plan the provider-backed chapter',
+        riskLevel: 'Medium',
+        outputSchema: 'ChapterPlan',
+        promptVersionId: 'prompt_chapter_plan_v1',
+        contextSections: [{ name: 'canon', content: 'The city is quiet.' }]
+      }
+    });
+
+    expect(prepareResponse.statusCode).toBe(201);
+    expect(seenRequests).toHaveLength(0);
+    const prepared = prepareResponse.json();
+    expect(prepared).toMatchObject({
+      projectId: project.id,
+      status: 'Prepared',
+      provider: {
+        provider: 'openai',
+        model: 'gpt-runtime',
+        isExternal: true,
+        secretConfigured: true
+      },
+      blockingReasons: [],
+      contextPack: {
+        taskGoal: 'Plan the provider-backed chapter',
+        retrievalTrace: expect.arrayContaining(['query:Plan the provider-backed chapter'])
+      }
+    });
+
+    const response = await runtime.app.inject({
+      method: 'POST',
+      url: `/orchestration/runs/${prepared.id}/execute`,
+      payload: { confirmed: true, confirmedBy: 'vitest' }
+    });
+
     expect(response.statusCode).toBe(201);
     const created = response.json();
     expect(created.output).toEqual({
@@ -120,6 +168,9 @@ describe('persistent API runtime', () => {
       schemaName: 'ChapterPlan',
       status: 'Succeeded'
     });
+    expect(created.agentRun.id).toBe(prepared.agentRunId);
+    expect(created.contextPack.id).toBe(prepared.contextPack.id);
+    expect(seenRequests).toHaveLength(1);
     expect(seenRequests[0]).toMatchObject({
       url: 'https://api.openai.com/v1/chat/completions',
       body: {
@@ -175,11 +226,18 @@ describe('persistent API runtime', () => {
     });
     const project = projectResponse.json();
 
-    await runtime.app.inject({
+    const firstPrepare = await runtime.app.inject({
       method: 'POST',
-      url: '/orchestration/runs',
+      url: '/orchestration/runs/prepare',
       payload: orchestrationPayload(project.id, 'First refresh run')
     });
+    expect(firstPrepare.statusCode).toBe(201);
+    const firstExecute = await runtime.app.inject({
+      method: 'POST',
+      url: `/orchestration/runs/${firstPrepare.json().id}/execute`,
+      payload: { confirmed: true }
+    });
+    expect(firstExecute.statusCode).toBe(201);
     await runtime.stores.settings.saveProviderSettings({
       provider: 'openai',
       defaultModel: 'gpt-after',
@@ -187,11 +245,18 @@ describe('persistent API runtime', () => {
       redactedMetadata: {},
       updatedAt: '2026-04-27T07:00:00.000Z'
     });
-    await runtime.app.inject({
+    const secondPrepare = await runtime.app.inject({
       method: 'POST',
-      url: '/orchestration/runs',
+      url: '/orchestration/runs/prepare',
       payload: orchestrationPayload(project.id, 'Second refresh run')
     });
+    expect(secondPrepare.statusCode).toBe(201);
+    const secondExecute = await runtime.app.inject({
+      method: 'POST',
+      url: `/orchestration/runs/${secondPrepare.json().id}/execute`,
+      payload: { confirmed: true }
+    });
+    expect(secondExecute.statusCode).toBe(201);
 
     expect(seenModels).toEqual(['gpt-before', 'gpt-after']);
 
@@ -279,7 +344,7 @@ describe('persistent API runtime', () => {
     runtime.database.client.close();
   });
 
-  it('fails closed at run time when OpenAI is configured but the env secret is missing', async () => {
+  it('shows missing external provider secrets during orchestration inspection and blocks execute', async () => {
     const runtime = await createPersistentApiRuntime(':memory:', {
         env: {},
         providerSettings: {
@@ -300,14 +365,31 @@ describe('persistent API runtime', () => {
       }
     });
 
-    const response = await runtime.app.inject({
+    const prepareResponse = await runtime.app.inject({
       method: 'POST',
-      url: '/orchestration/runs',
+      url: '/orchestration/runs/prepare',
       payload: orchestrationPayload(projectResponse.json().id, 'Plan without secret')
     });
 
-    expect(response.statusCode).toBe(500);
-    expect(response.json().error).toContain('Missing provider secret: env:OPENAI_API_KEY');
+    expect(prepareResponse.statusCode).toBe(201);
+    expect(prepareResponse.json()).toMatchObject({
+      provider: {
+        provider: 'openai',
+        model: 'gpt-runtime',
+        isExternal: true,
+        secretConfigured: false
+      },
+      blockingReasons: ['Missing provider secret: env:OPENAI_API_KEY']
+    });
+
+    const executeResponse = await runtime.app.inject({
+      method: 'POST',
+      url: `/orchestration/runs/${prepareResponse.json().id}/execute`,
+      payload: { confirmed: true }
+    });
+
+    expect(executeResponse.statusCode).toBe(409);
+    expect(executeResponse.json().error).toContain('Missing provider secret: env:OPENAI_API_KEY');
 
     await runtime.app.close();
     runtime.database.client.close();

@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   createApiClient,
+  type AgentOrchestrationRunResult,
+  type ApiClient,
   type AgentRoomApiClient,
   type AgentRoomActionResult,
   type AgentRoomRunDetail,
-  type AgentRoomRunSummary
+  type AgentRoomRunSummary,
+  type OrchestrationApiClient,
+  type OrchestrationRunInput,
+  type PreparedAgentOrchestrationRun
 } from '../api/client';
 import { ContextInspector } from './ContextInspector';
 import { RunGraph } from './RunGraph';
@@ -24,13 +29,20 @@ type AgentRoomState =
       actionError: string | null;
     };
 
+type AgentRoomClient = AgentRoomApiClient & Partial<Pick<ApiClient, 'listProjects'> & OrchestrationApiClient>;
+
 export interface AgentRoomProps {
-  client?: AgentRoomApiClient;
+  client?: AgentRoomClient;
 }
 
 export function AgentRoom({ client }: AgentRoomProps) {
   const resolvedClient = useMemo(() => client ?? createApiClient(), [client]);
   const [state, setState] = useState<AgentRoomState>({ status: 'loading' });
+  const [projectId, setProjectId] = useState('');
+  const [preparedOrchestration, setPreparedOrchestration] = useState<PreparedAgentOrchestrationRun | null>(null);
+  const [orchestrationResult, setOrchestrationResult] = useState<AgentOrchestrationRunResult | null>(null);
+  const [orchestrationError, setOrchestrationError] = useState<string | null>(null);
+  const [orchestrationBusy, setOrchestrationBusy] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -80,6 +92,88 @@ export function AgentRoom({ client }: AgentRoomProps) {
       isMounted = false;
     };
   }, [resolvedClient]);
+
+  useEffect(() => {
+    if (!canLoadProjects(resolvedClient) || !canPrepareOrchestration(resolvedClient)) return;
+    const orchestrationClient = resolvedClient;
+    let isMounted = true;
+
+    async function loadProject() {
+      try {
+        const projects = await orchestrationClient.listProjects();
+        if (isMounted) {
+          setProjectId(projects[0]?.id ?? '');
+        }
+      } catch {
+        if (isMounted) {
+          setProjectId('');
+        }
+      }
+    }
+
+    void loadProject();
+    return () => {
+      isMounted = false;
+    };
+  }, [resolvedClient]);
+
+  async function currentProjectId(): Promise<string> {
+    if (projectId) return projectId;
+    if (!canLoadProjects(resolvedClient)) return '';
+    const projects = await resolvedClient.listProjects();
+    const nextProjectId = projects[0]?.id ?? '';
+    setProjectId(nextProjectId);
+    return nextProjectId;
+  }
+
+  async function inspectOrchestrationSend() {
+    if (!canPrepareOrchestration(resolvedClient)) return;
+    setOrchestrationBusy('prepare');
+    setOrchestrationError(null);
+    setOrchestrationResult(null);
+    try {
+      const resolvedProjectId = await currentProjectId();
+      if (!resolvedProjectId) throw new Error('No project available.');
+      const prepared = await resolvedClient.prepareOrchestrationRun(orchestrationRunInputFor(resolvedProjectId));
+      setPreparedOrchestration(prepared);
+    } catch (error) {
+      setOrchestrationError(error instanceof Error ? error.message : 'Unable to prepare orchestration send.');
+    } finally {
+      setOrchestrationBusy(null);
+    }
+  }
+
+  async function confirmOrchestrationSend() {
+    if (!preparedOrchestration || !canPrepareOrchestration(resolvedClient)) return;
+    setOrchestrationBusy('execute');
+    setOrchestrationError(null);
+    try {
+      const result = await resolvedClient.executePreparedOrchestrationRun(preparedOrchestration.id, {
+        confirmed: true,
+        confirmedBy: 'operator'
+      });
+      setOrchestrationResult(result);
+      setPreparedOrchestration(null);
+    } catch (error) {
+      setOrchestrationError(error instanceof Error ? error.message : 'Unable to execute orchestration send.');
+    } finally {
+      setOrchestrationBusy(null);
+    }
+  }
+
+  async function cancelOrchestrationSend() {
+    if (!preparedOrchestration || !canPrepareOrchestration(resolvedClient)) return;
+    setOrchestrationBusy('cancel');
+    setOrchestrationError(null);
+    try {
+      await resolvedClient.cancelPreparedOrchestrationRun(preparedOrchestration.id, { cancelledBy: 'operator' });
+      setPreparedOrchestration(null);
+    } catch (error) {
+      setOrchestrationError(error instanceof Error ? error.message : 'Unable to cancel orchestration send.');
+    } finally {
+      setOrchestrationBusy(null);
+    }
+  }
 
   async function selectRun(runId: string) {
     if (state.status !== 'loaded') return;
@@ -161,17 +255,167 @@ export function AgentRoom({ client }: AgentRoomProps) {
           <section className="work-surface" aria-label="Agent run detail">
             {state.detailLoading ? <p>Loading run detail...</p> : null}
             {state.detail ? (
-              <AgentRunDetail
-                actionError={state.actionError}
-                actionResult={state.actionResult}
-                actionRunning={state.actionRunning}
-                detail={state.detail}
-                onRunAction={runAction}
-              />
+              <>
+                <AgentRunDetail
+                  actionError={state.actionError}
+                  actionResult={state.actionResult}
+                  actionRunning={state.actionRunning}
+                  detail={state.detail}
+                  onRunAction={runAction}
+                />
+                {canPrepareOrchestration(resolvedClient) ? (
+                  <OrchestrationPreSendControls
+                    busy={orchestrationBusy}
+                    error={orchestrationError}
+                    onCancel={() => void cancelOrchestrationSend()}
+                    onConfirm={() => void confirmOrchestrationSend()}
+                    onInspect={() => void inspectOrchestrationSend()}
+                    prepared={preparedOrchestration}
+                    result={orchestrationResult}
+                  />
+                ) : null}
+              </>
             ) : null}
           </section>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function canLoadProjects(client: AgentRoomClient): client is AgentRoomClient & Pick<ApiClient, 'listProjects'> {
+  return typeof client.listProjects === 'function';
+}
+
+function canPrepareOrchestration(client: AgentRoomClient): client is AgentRoomClient & OrchestrationApiClient {
+  return (
+    typeof client.prepareOrchestrationRun === 'function' &&
+    typeof client.executePreparedOrchestrationRun === 'function' &&
+    typeof client.cancelPreparedOrchestrationRun === 'function'
+  );
+}
+
+function orchestrationRunInputFor(projectId: string): OrchestrationRunInput {
+  return {
+    projectId,
+    workflowType: 'chapter_creation',
+    taskType: 'chapter_planning',
+    agentRole: 'Planner',
+    taskGoal: 'Plan the next inspected chapter',
+    riskLevel: 'Medium',
+    outputSchema: 'ChapterPlan',
+    promptVersionId: 'prompt_chapter_plan_v1',
+    retrieval: {
+      query: 'next inspected chapter',
+      maxContextItems: 4,
+      maxSectionChars: 1200
+    }
+  };
+}
+
+function OrchestrationPreSendControls({
+  busy,
+  error,
+  onCancel,
+  onConfirm,
+  onInspect,
+  prepared,
+  result
+}: {
+  busy: string | null;
+  error: string | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+  onInspect: () => void;
+  prepared: PreparedAgentOrchestrationRun | null;
+  result: AgentOrchestrationRunResult | null;
+}) {
+  return (
+    <section aria-label="Orchestration send controls">
+      <h4>Orchestration Send</h4>
+      <div>
+        <button disabled={busy !== null} onClick={onInspect} type="button">
+          Inspect orchestration send
+        </button>
+        <button
+          disabled={!prepared || prepared.blockingReasons.length > 0 || busy !== null}
+          onClick={onConfirm}
+          type="button"
+        >
+          Confirm orchestration send
+        </button>
+        <button disabled={!prepared || busy !== null} onClick={onCancel} type="button">
+          Cancel orchestration send
+        </button>
+      </div>
+      {error ? <p role="alert">{error}</p> : null}
+      {prepared ? <OrchestrationInspection prepared={prepared} /> : null}
+      {result ? (
+        <pre aria-label="Orchestration execution result">{JSON.stringify(result.output, null, 2)}</pre>
+      ) : null}
+    </section>
+  );
+}
+
+function OrchestrationInspection({ prepared }: { prepared: PreparedAgentOrchestrationRun }) {
+  return (
+    <section aria-label="Orchestration pre-send inspection" className="context-inspector">
+      <h4>Pre-send inspection</h4>
+      <dl className="compact-list">
+        <div>
+          <dt>Provider</dt>
+          <dd>
+            {prepared.provider.provider} / {prepared.provider.model}
+          </dd>
+        </div>
+        <div>
+          <dt>Context pack</dt>
+          <dd>{prepared.contextPack.id}</dd>
+        </div>
+        <div>
+          <dt>Budget estimate</dt>
+          <dd>
+            {prepared.budgetEstimate.inputTokens} input / {prepared.budgetEstimate.outputTokens} output / $
+            {prepared.budgetEstimate.estimatedCostUsd.toFixed(4)}
+          </dd>
+        </div>
+        {prepared.contextPack.sections.map((section) => (
+          <div key={section.name}>
+            <dt>{section.name}</dt>
+            <dd>{section.content}</dd>
+          </div>
+        ))}
+        {prepared.contextPack.citations.map((citation) => (
+          <div key={`${citation.sourceId}-${citation.quote ?? ''}`}>
+            <dt>Evidence</dt>
+            <dd>{citation.quote ?? citation.sourceId}</dd>
+          </div>
+        ))}
+        {prepared.contextPack.exclusions.map((exclusion) => (
+          <div key={exclusion}>
+            <dt>Excluded</dt>
+            <dd>{exclusion}</dd>
+          </div>
+        ))}
+        {[...prepared.warnings, ...prepared.contextPack.warnings].map((warning) => (
+          <div key={warning}>
+            <dt>Warning</dt>
+            <dd>{warning}</dd>
+          </div>
+        ))}
+        {prepared.blockingReasons.map((reason) => (
+          <div key={reason}>
+            <dt>Blocked</dt>
+            <dd>{reason}</dd>
+          </div>
+        ))}
+        {prepared.contextPack.retrievalTrace.map((trace) => (
+          <div key={trace}>
+            <dt>Retrieval</dt>
+            <dd>{trace}</dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }
