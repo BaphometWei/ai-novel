@@ -2,6 +2,7 @@ export * from './authorship';
 export * from './agents';
 export * from './copilot-runtime';
 export * from './durable-job';
+export * from './durable-queue';
 export * from './export-workflow';
 export * from './import-workflow';
 export * from './task-contract';

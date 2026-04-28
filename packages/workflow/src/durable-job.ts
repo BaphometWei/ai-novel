@@ -9,9 +9,18 @@ export interface DurableJob {
   status: DurableJobStatus;
   retryCount: number;
   replayOfJobId?: string;
+  availableAt?: string;
+  leaseOwner?: string;
+  leaseExpiresAt?: string;
+  cancelRequestedAt?: string;
+  lastError?: string;
 }
 
-export function createDurableJob(input: { workflowType: string; payload: Record<string, unknown> }): DurableJob {
+export function createDurableJob(input: {
+  workflowType: string;
+  payload: Record<string, unknown>;
+  availableAt?: string;
+}): DurableJob {
   return {
     id: `job_${createId('agent_run').slice('agent_run_'.length)}`,
     status: 'Queued',
@@ -24,7 +33,9 @@ export function transitionJob(job: DurableJob, status: DurableJobStatus): Durabl
   return {
     ...job,
     status,
-    retryCount: status === 'Retrying' ? job.retryCount + 1 : job.retryCount
+    retryCount: status === 'Retrying' ? job.retryCount + 1 : job.retryCount,
+    leaseOwner: terminalStatuses.has(status) ? undefined : job.leaseOwner,
+    leaseExpiresAt: terminalStatuses.has(status) ? undefined : job.leaseExpiresAt
   };
 }
 
@@ -33,6 +44,14 @@ export function replayJob(job: DurableJob): DurableJob {
     ...job,
     id: `job_${createId('agent_run').slice('agent_run_'.length)}`,
     status: 'Queued',
-    replayOfJobId: job.replayOfJobId ?? job.id
+    retryCount: 0,
+    replayOfJobId: job.replayOfJobId ?? job.id,
+    availableAt: undefined,
+    leaseOwner: undefined,
+    leaseExpiresAt: undefined,
+    cancelRequestedAt: undefined,
+    lastError: undefined
   };
 }
+
+const terminalStatuses = new Set<DurableJobStatus>(['Succeeded', 'Failed', 'Cancelled']);
