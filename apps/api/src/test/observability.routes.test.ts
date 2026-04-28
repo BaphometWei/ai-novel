@@ -78,8 +78,12 @@ describe('observability API routes', () => {
       cost: { totalUsd: 0.0014, averageUsdPerRun: 0.0014 },
       latency: { averageDurationMs: 250, p95DurationMs: 250 },
       tokens: { total: 140, averagePerRun: 140 },
-      quality: { acceptedRate: 1 },
-      adoption: { adoptedRate: 1 }
+      quality: { acceptedRate: 1, status: 'Measured' },
+      adoption: { adoptedRate: 1, status: 'Measured' },
+      modelUsage: [{ modelName: 'fake-model', runCount: 1 }],
+      runErrors: [],
+      workflowBottlenecks: [],
+      dataQuality: { openIssueCount: 0, highSeverityOpenCount: 0 }
     });
     database.client.close();
   });
@@ -125,7 +129,16 @@ describe('observability API routes', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       cost: { totalUsd: 0.00015 },
-      tokens: { total: 15 }
+      tokens: { total: 15 },
+      quality: { status: 'Measured' },
+      adoption: { status: 'Measured' },
+      modelUsage: expect.any(Array),
+      runErrors: expect.any(Array),
+      workflowBottlenecks: expect.any(Array),
+      dataQuality: {
+        openIssueCount: expect.any(Number),
+        highSeverityOpenCount: expect.any(Number)
+      }
     });
     await runtime.app.close();
     runtime.database.client.close();

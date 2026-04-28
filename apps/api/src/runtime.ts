@@ -246,7 +246,11 @@ export async function createPersistentApiRuntime(
       },
       manuscriptService,
       orchestration,
-      observability: stores.agentRuns,
+      observability: {
+        ...stores.agentRuns,
+        durableJobs,
+        approvals: memory
+      },
       projectService,
       importExport: createPersistentImportExportStore(stores.importExport),
       retrieval: {
