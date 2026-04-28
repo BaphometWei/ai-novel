@@ -1,4 +1,4 @@
-import type { Project } from '@ai-novel/domain';
+import type { ExternalModelPolicy, Project } from '@ai-novel/domain';
 import { asc, eq } from 'drizzle-orm';
 import type { AppDatabase } from '../connection';
 import { projects } from '../schema';
@@ -12,6 +12,7 @@ export class ProjectRepository {
       title: project.title,
       language: project.language,
       status: project.status,
+      externalModelPolicy: project.externalModelPolicy,
       readerContractJson: JSON.stringify(project.readerContract),
       createdAt: project.createdAt,
       updatedAt: project.updatedAt
@@ -29,6 +30,25 @@ export class ProjectRepository {
 
     return projectFromRow(row);
   }
+
+  async updateExternalModelPolicy(id: string, policy: ExternalModelPolicy): Promise<Project | null> {
+    const existing = await this.findById(id);
+    if (!existing) return null;
+
+    const updated: Project = {
+      ...existing,
+      externalModelPolicy: policy,
+      updatedAt: new Date().toISOString()
+    };
+    await this.db
+      .update(projects)
+      .set({
+        externalModelPolicy: updated.externalModelPolicy,
+        updatedAt: updated.updatedAt
+      })
+      .where(eq(projects.id, id));
+    return updated;
+  }
 }
 
 function projectFromRow(row: typeof projects.$inferSelect): Project {
@@ -37,6 +57,7 @@ function projectFromRow(row: typeof projects.$inferSelect): Project {
     title: row.title,
     language: row.language as Project['language'],
     status: row.status as Project['status'],
+    externalModelPolicy: (row.externalModelPolicy ?? 'Allowed') as Project['externalModelPolicy'],
     readerContract: JSON.parse(row.readerContractJson) as Project['readerContract'],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt

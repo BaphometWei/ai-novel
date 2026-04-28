@@ -541,6 +541,7 @@ function projectFromBackupPayload(targetProjectId: string, payload: unknown): Pr
     title: source.title,
     language: source.language,
     status: source.status,
+    externalModelPolicy: source.externalModelPolicy ?? 'Allowed',
     readerContract: source.readerContract,
     createdAt: source.createdAt,
     updatedAt: new Date().toISOString()

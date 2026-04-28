@@ -57,6 +57,24 @@ describe('retrieval evaluation API routes', () => {
         excludedCount: 1,
         failureCount: 2
       },
+      thresholds: {
+        requiredCoverage: 1,
+        forbiddenLeakage: 0
+      },
+      includedIds: ['fact_key_location', 'draft_false_key'],
+      excludedIds: ['fact_lantern_owner'],
+      triageHints: [
+        {
+          itemId: 'fact_lantern_owner',
+          severity: 'blocking',
+          message: 'Required retrieval item fact_lantern_owner was excluded: not_returned_by_project_search.'
+        },
+        {
+          itemId: 'draft_false_key',
+          severity: 'blocking',
+          message: 'Forbidden retrieval item draft_false_key was included in context.'
+        }
+      ],
       included: [
         { id: 'fact_key_location', text: 'The observatory key is in the lantern.' },
         { id: 'draft_false_key', text: 'The key is under the mat.' }
@@ -107,6 +125,24 @@ describe('retrieval evaluation API routes', () => {
         excludedCount: 1,
         failureCount: 2
       },
+      thresholds: {
+        requiredCoverage: 1,
+        forbiddenLeakage: 0
+      },
+      includedIds: ['fact_key_location', 'draft_false_key'],
+      excludedIds: ['old_outline'],
+      triageHints: [
+        {
+          itemId: 'fact_lantern_owner',
+          severity: 'blocking',
+          message: 'Required retrieval item fact_lantern_owner was missing from included context.'
+        },
+        {
+          itemId: 'draft_false_key',
+          severity: 'blocking',
+          message: 'Forbidden retrieval item draft_false_key was included in context.'
+        }
+      ],
       included: [
         { id: 'fact_key_location', text: 'The observatory key is in the lantern.' },
         { id: 'draft_false_key', text: 'The key is under the mat.' }

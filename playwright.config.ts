@@ -5,6 +5,7 @@ const e2eDbPath = process.env.AI_NOVEL_E2E_DB_PATH ?? `data/e2e-ai-novel-${e2eRu
 
 export default defineConfig({
   testDir: './tests/e2e',
+  workers: 1,
   use: {
     baseURL: 'http://127.0.0.1:5173',
     trace: 'on-first-retry'

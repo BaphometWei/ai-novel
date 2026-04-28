@@ -136,7 +136,7 @@ export function createDefaultAgentOrchestrationService(stores: AgentOrchestratio
 
 export function createAgentOrchestrationService(
   stores: AgentOrchestrationStores,
-  createGateway: (input: { promptVersionId: string }) => LlmGateway | Promise<LlmGateway>
+  createGateway: (input: { promptVersionId: string; allowExternalModel?: boolean }) => LlmGateway | Promise<LlmGateway>
 ): AgentOrchestrationService {
   return new PersistentAgentOrchestrationService(stores, createGateway);
 }
@@ -146,7 +146,7 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
 
   constructor(
     private readonly stores: AgentOrchestrationStores,
-    private readonly createGateway: (input: { promptVersionId: string }) => LlmGateway | Promise<LlmGateway>
+    private readonly createGateway: (input: { promptVersionId: string; allowExternalModel?: boolean }) => LlmGateway | Promise<LlmGateway>
   ) {}
 
   async start(input: StartAgentOrchestrationInput): Promise<AgentOrchestrationResult> {
@@ -213,7 +213,10 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
         riskLevel: input.riskLevel,
         outputSchema: input.outputSchema
       });
-      const gateway = await this.createGateway({ promptVersionId });
+      const gateway = await this.createGateway({
+        promptVersionId,
+        allowExternalModel: project.externalModelPolicy !== 'Disabled'
+      });
       let generated: { value: Record<string, unknown> };
       try {
         generated = await gateway.generateStructured<Record<string, unknown>>({
@@ -297,6 +300,12 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
         throw error;
       }
       const message = error instanceof Error ? error.message : 'Agent orchestration failed';
+      const statusCode =
+        message === 'External model use is disabled for this project'
+          ? 403
+          : error instanceof AgentOrchestrationError
+            ? error.statusCode
+            : 500;
       const failedJob: DurableJob = {
         ...transitionJob(runningJob, 'Failed'),
         payload: {
@@ -308,7 +317,7 @@ class PersistentAgentOrchestrationService implements AgentOrchestrationService {
       await this.stores.durableJobs.save(failedJob);
       throw new AgentOrchestrationError(
         message,
-        error instanceof AgentOrchestrationError ? error.statusCode : 500,
+        statusCode,
         failedJob.id
       );
     }

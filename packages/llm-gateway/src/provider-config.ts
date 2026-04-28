@@ -1,8 +1,11 @@
+import { createEnvSecretStore, type ProviderSecretStore } from './secret-store';
+
 export interface ProviderConfigInput {
   provider: string;
   defaultModel: string;
   secretRef: string;
   env?: Record<string, string | undefined>;
+  secretStore?: ProviderSecretStore;
 }
 
 export interface ResolvedProviderConfig {
@@ -20,13 +23,8 @@ export interface PublicProviderConfig {
 }
 
 export function resolveProviderConfig(input: ProviderConfigInput): ResolvedProviderConfig {
-  const env = input.env ?? {};
-  if (!input.secretRef.startsWith('env:')) {
-    throw new Error(`Unsupported provider secret reference: ${input.secretRef}`);
-  }
-
-  const envName = input.secretRef.slice('env:'.length);
-  const apiKey = env[envName];
+  const secretStore = input.secretStore ?? createEnvSecretStore(input.env ?? {});
+  const apiKey = secretStore.resolve(input.secretRef);
   if (!apiKey) {
     throw new Error(`Missing provider secret: ${input.secretRef}`);
   }

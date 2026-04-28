@@ -60,9 +60,17 @@ export function registerWritingRunRoutes(app: FastifyInstance, dependencies: Wri
       retrieval: parsed.data.retrieval
     };
 
-    const result = isPersistentWritingRunService(dependencies)
-      ? await dependencies.start(input)
-      : await runWritingWorkflow(input, dependencies);
+    let result;
+    try {
+      result = isPersistentWritingRunService(dependencies)
+        ? await dependencies.start(input)
+        : await runWritingWorkflow(input, dependencies);
+    } catch (error) {
+      if (error instanceof Error && error.message === 'External model use is disabled for this project') {
+        return reply.code(403).send({ error: error.message });
+      }
+      throw error;
+    }
 
     return reply.code(201).send(result);
   });

@@ -20,6 +20,8 @@ describe('RetrievalEvaluationPanel', () => {
 
     const passed = await screen.findByLabelText('Passing retrieval case');
     expect(within(passed).getByText('Passed')).toBeInTheDocument();
+    expect(within(passed).getByText('Thresholds')).toBeInTheDocument();
+    expect(within(passed).getByText('required coverage 100% / forbidden leakage 0%')).toBeInTheDocument();
     expect(within(passed).getByText('scene_archive')).toBeInTheDocument();
     expect(within(passed).getByText('source_public_1')).toBeInTheDocument();
 
@@ -29,6 +31,9 @@ describe('RetrievalEvaluationPanel', () => {
     expect(within(failed).getByText('forbidden_included')).toBeInTheDocument();
     expect(within(failed).getByText('scene_secret')).toBeInTheDocument();
     expect(within(failed).getByText('source_restricted_7')).toBeInTheDocument();
+    expect(within(failed).getByText('Triage')).toBeInTheDocument();
+    expect(within(failed).getByText('Required scene was excluded.')).toBeInTheDocument();
+    expect(within(failed).getByText('Forbidden source was included.')).toBeInTheDocument();
     expect(runProjectRetrievalRegression).toHaveBeenNthCalledWith(1, 'project_1', passingRunInput);
     expect(runProjectRetrievalRegression).toHaveBeenNthCalledWith(2, 'project_1', failingRunInput);
     expect(JSON.stringify(runProjectRetrievalRegression.mock.calls)).not.toContain('included');
@@ -119,6 +124,10 @@ const passingResult = {
   policyId: 'policy_public_only',
   passed: true,
   summary: { includedCount: 1, excludedCount: 1, failureCount: 0 },
+  thresholds: { requiredCoverage: 1, forbiddenLeakage: 0 },
+  includedIds: ['scene_archive'],
+  excludedIds: ['source_public_1'],
+  triageHints: [],
   included: [{ id: 'scene_archive', text: 'Archive door clue' }],
   excluded: [{ id: 'source_public_1', reason: 'low_score' }],
   failures: []
@@ -131,6 +140,13 @@ const failingResult = {
   policyId: 'policy_public_only',
   passed: false,
   summary: { includedCount: 1, excludedCount: 1, failureCount: 2 },
+  thresholds: { requiredCoverage: 1, forbiddenLeakage: 0 },
+  includedIds: ['source_restricted_7'],
+  excludedIds: ['scene_secret'],
+  triageHints: [
+    { itemId: 'scene_secret', severity: 'blocking', message: 'Required scene was excluded.' },
+    { itemId: 'source_restricted_7', severity: 'blocking', message: 'Forbidden source was included.' }
+  ],
   included: [{ id: 'source_restricted_7', text: 'Restricted dossier' }],
   excluded: [{ id: 'scene_secret', reason: 'filtered_out' }],
   failures: [

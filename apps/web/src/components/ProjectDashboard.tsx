@@ -93,6 +93,19 @@ export function ProjectDashboard({ client, onProjectLoaded }: ProjectDashboardPr
   const renderedStats = stats.map((stat) =>
     stat.label === 'Draft Chapters' ? { ...stat, value: String(chapterCount) } : stat
   );
+  const externalModelPolicy = loadedProject?.externalModelPolicy ?? 'Allowed';
+  const nextExternalModelPolicy = externalModelPolicy === 'Allowed' ? 'Disabled' : 'Allowed';
+
+  async function updateExternalModelPolicy() {
+    if (!loadedProject || state.status !== 'loaded') return;
+
+    const updatedProject = await resolvedClient.updateProjectExternalModelPolicy(
+      loadedProject.id,
+      nextExternalModelPolicy
+    );
+    setState({ status: 'loaded', project: updatedProject, chapters: state.chapters });
+    onProjectLoaded?.(updatedProject);
+  }
 
   return (
     <section className="dashboard-panel" aria-labelledby="current-project">
@@ -149,6 +162,15 @@ export function ProjectDashboard({ client, onProjectLoaded }: ProjectDashboardPr
         <section className="work-surface" aria-label="Project dashboard error">
           <h3>Unable to load project dashboard.</h3>
           <p>{state.message}</p>
+        </section>
+      ) : null}
+      {loadedProject ? (
+        <section className="work-surface" aria-label="External model policy">
+          <h3>Model Access</h3>
+          <p>{externalModelPolicy === 'Allowed' ? 'External models allowed' : 'External models disabled'}</p>
+          <button type="button" onClick={() => void updateExternalModelPolicy()}>
+            {externalModelPolicy === 'Allowed' ? 'Disable external models' : 'Allow external models'}
+          </button>
         </section>
       ) : null}
       <div className="status-grid">

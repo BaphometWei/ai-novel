@@ -19,7 +19,25 @@ describe('ProjectDashboard', () => {
     expect(await screen.findByRole('heading', { name: 'Long Night' })).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByText('2 chapters loaded.')).toBeInTheDocument();
-    expect(onProjectLoaded).toHaveBeenCalledWith({ id: 'project_1', title: 'Long Night', status: 'Active' });
+    expect(screen.getByText('External models allowed')).toBeInTheDocument();
+    expect(onProjectLoaded).toHaveBeenCalledWith({
+      id: 'project_1',
+      title: 'Long Night',
+      status: 'Active',
+      externalModelPolicy: 'Allowed'
+    });
+  });
+
+  it('updates the project external model policy from the dashboard', async () => {
+    const client = mockClient();
+
+    render(<ProjectDashboard client={client} />);
+
+    expect(await screen.findByText('External models allowed')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Disable external models' }));
+
+    expect(await screen.findByText('External models disabled')).toBeInTheDocument();
+    expect(client.updateProjectExternalModelPolicy).toHaveBeenCalledWith('project_1', 'Disabled');
   });
 
   it('shows an error state when the project summary cannot be loaded', async () => {
@@ -33,7 +51,7 @@ describe('ProjectDashboard', () => {
     const fetchImpl = vi.fn(async (url: string | URL | Request) => {
       const path = String(url);
       if (path === '/projects') return jsonResponse([{ id: 'project_1', title: 'Default Project' }]);
-      if (path === '/projects/project_1') return jsonResponse({ id: 'project_1', title: 'Default Project' });
+      if (path === '/projects/project_1') return jsonResponse({ id: 'project_1', title: 'Default Project', externalModelPolicy: 'Allowed' });
       if (path === '/projects/project_1/chapters') return jsonResponse([]);
       if (path === '/approvals') return jsonResponse({ items: [] });
       return jsonResponse({}, false, 404);
@@ -50,7 +68,7 @@ describe('ProjectDashboard', () => {
     const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const path = String(url);
       if (path === '/projects') return jsonResponse([{ id: 'project_1', title: 'Default Project' }]);
-      if (path === '/projects/project_1') return jsonResponse({ id: 'project_1', title: 'Default Project' });
+      if (path === '/projects/project_1') return jsonResponse({ id: 'project_1', title: 'Default Project', externalModelPolicy: 'Allowed' });
       if (path === '/projects/project_1/chapters') return jsonResponse([]);
       if (path === '/approvals') {
         return jsonResponse({
@@ -109,7 +127,18 @@ function mockClient(options: { reject?: boolean } = {}): ApiClient {
       if (options.reject) throw new Error('Network down');
       return [{ id: 'project_1', title: 'Long Night' }];
     },
-    getProjectSummary: async () => ({ id: 'project_1', title: 'Long Night', status: 'Active' }),
+    getProjectSummary: async () => ({
+      id: 'project_1',
+      title: 'Long Night',
+      status: 'Active',
+      externalModelPolicy: 'Allowed'
+    }),
+    updateProjectExternalModelPolicy: vi.fn(async (_projectId, externalModelPolicy) => ({
+      id: 'project_1',
+      title: 'Long Night',
+      status: 'Active',
+      externalModelPolicy
+    })),
     listProjectChapters: async () => [
       { id: 'chapter_1', title: 'Opening' },
       { id: 'chapter_2', title: 'Reversal' }

@@ -94,10 +94,60 @@ describe('persistent writing runs', () => {
     runtime.database.client.close();
     await runtime.app.close();
   });
+
+  it('blocks real external-provider writing runs when the project disables external models', async () => {
+    const runtime = await createPersistentApiRuntime(':memory:', {
+      env: { OPENAI_API_KEY: 'sk-local-test-secret' },
+      providerSettings: {
+        provider: 'openai',
+        defaultModel: 'gpt-test',
+        secretRef: 'env:OPENAI_API_KEY',
+        redactedMetadata: {},
+        updatedAt: '2026-04-28T00:00:00.000Z'
+      },
+      fetch: async () => {
+        throw new Error('external provider should not be called');
+      }
+    });
+
+    await seedProject(runtime.database.client, 'Disabled');
+
+    const response = await runtime.app.inject({
+      method: 'POST',
+      url: '/projects/project_seed/writing-runs',
+      payload: {
+        target: {
+          manuscriptId: 'manuscript_seed',
+          chapterId: 'chapter_seed',
+          range: 'chapter_1'
+        },
+        contract: {
+          authorshipLevel: 'A3',
+          goal: 'Draft a traceable scene',
+          mustWrite: 'Write one scene without promoting canon.',
+          wordRange: { min: 100, max: 400 },
+          forbiddenChanges: ['Do not alter canon'],
+          acceptanceCriteria: ['Creates a draft artifact']
+        },
+        retrieval: {
+          query: 'traceable scene',
+          maxContextItems: 4,
+          maxSectionChars: 1200
+        }
+      }
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: 'External model use is disabled for this project' });
+
+    runtime.database.client.close();
+    await runtime.app.close();
+  });
 });
 
-async function seedProject(client: { execute(sql: string): Promise<unknown> }) {
+async function seedProject(client: { execute(sql: string): Promise<unknown> }, externalModelPolicy = 'Allowed') {
   await client.execute(`INSERT INTO projects (id, title, language, status, reader_contract_json, created_at, updated_at) VALUES (
     'project_seed', 'Seed Project', 'zh-CN', 'Active', '{}', '2026-04-28T00:00:00.000Z', '2026-04-28T00:00:00.000Z'
   )`);
+  await client.execute(`UPDATE projects SET external_model_policy = '${externalModelPolicy}' WHERE id = 'project_seed'`);
 }

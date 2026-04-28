@@ -20,7 +20,28 @@ describe('ProjectRepository', () => {
     await expect(repository.findById(project.id)).resolves.toMatchObject({
       id: project.id,
       title: 'Long Night',
-      status: 'Active'
+      status: 'Active',
+      externalModelPolicy: 'Allowed'
+    });
+    database.client.close();
+  });
+
+  it('persists external model policy updates', async () => {
+    const database = createDatabase(':memory:');
+    await migrateDatabase(database.client);
+    const repository = new ProjectRepository(database.db);
+    const project = createProject({
+      title: 'Offline Draft',
+      language: 'en-US',
+      targetAudience: 'local-only authors'
+    });
+    await repository.save(project);
+
+    await repository.updateExternalModelPolicy(project.id, 'Disabled');
+
+    await expect(repository.findById(project.id)).resolves.toMatchObject({
+      id: project.id,
+      externalModelPolicy: 'Disabled'
     });
     database.client.close();
   });

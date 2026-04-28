@@ -8,8 +8,11 @@ export interface ProjectListItem {
   title: string;
 }
 
+export type ExternalModelPolicy = 'Allowed' | 'Disabled';
+
 export interface ProjectSummary extends ProjectListItem {
   status?: string;
+  externalModelPolicy: ExternalModelPolicy;
 }
 
 export interface ChapterSummary {
@@ -534,6 +537,7 @@ export interface ApiClient {
   fetchHealth(): Promise<HealthResponse>;
   listProjects(): Promise<ProjectListItem[]>;
   getProjectSummary(projectId: string): Promise<ProjectSummary>;
+  updateProjectExternalModelPolicy(projectId: string, policy: ExternalModelPolicy): Promise<ProjectSummary>;
   listProjectChapters(projectId: string): Promise<ChapterSummary[]>;
   getChapterCurrentBody(chapterId: string): Promise<ChapterCurrentBody | null>;
 }
@@ -804,6 +808,12 @@ export interface RetrievalRegressionFailure {
   message?: string;
 }
 
+export interface RetrievalRegressionTriageHint {
+  itemId: string;
+  severity: string;
+  message: string;
+}
+
 export interface RetrievalRegressionResult {
   caseId: string;
   projectId: string;
@@ -815,6 +825,13 @@ export interface RetrievalRegressionResult {
     excludedCount: number;
     failureCount: number;
   };
+  thresholds: {
+    requiredCoverage: number;
+    forbiddenLeakage: number;
+  };
+  includedIds: string[];
+  excludedIds: string[];
+  triageHints: RetrievalRegressionTriageHint[];
   included: RetrievalRegressionItem[];
   excluded: RetrievalRegressionExcludedItem[];
   failures: RetrievalRegressionFailure[];
@@ -995,6 +1012,14 @@ export function createApiClient(
     fetchHealth: () => fetchHealth(baseUrl, fetchImpl),
     listProjects: async () => adaptProjectList(await requestJson(fetchImpl, `${baseUrl}/projects`)),
     getProjectSummary: async (projectId) => adaptProjectSummary(await requestJson(fetchImpl, `${baseUrl}/projects/${projectId}`)),
+    updateProjectExternalModelPolicy: async (projectId, policy) =>
+      adaptProjectSummary(
+        await requestJson(
+          fetchImpl,
+          `${baseUrl}/projects/${projectId}/external-model-policy`,
+          jsonRequest('PATCH', { externalModelPolicy: policy })
+        )
+      ),
     listProjectChapters: async (projectId) =>
       adaptChapterList(await requestJson(fetchImpl, `${baseUrl}/projects/${projectId}/chapters`)),
     getChapterCurrentBody: async (chapterId) =>
@@ -1324,6 +1349,17 @@ function adaptRetrievalRegressionResult(value: unknown): RetrievalRegressionResu
       excludedCount: numberOrFallback(value.summary.excludedCount, 0),
       failureCount: numberOrFallback(value.summary.failureCount, 0)
     },
+    thresholds: isRecord(value.thresholds)
+      ? {
+          requiredCoverage: numberOrFallback(value.thresholds.requiredCoverage, 0),
+          forbiddenLeakage: numberOrFallback(value.thresholds.forbiddenLeakage, 0)
+        }
+      : { requiredCoverage: 0, forbiddenLeakage: 0 },
+    includedIds: stringArrayOrEmpty(value.includedIds),
+    excludedIds: stringArrayOrEmpty(value.excludedIds),
+    triageHints: Array.isArray(value.triageHints)
+      ? value.triageHints.filter(isRecord).map(adaptRetrievalRegressionTriageHint)
+      : [],
     included: Array.isArray(value.included) ? value.included.filter(isRecord).map(adaptRetrievalRegressionItem) : [],
     excluded: Array.isArray(value.excluded) ? value.excluded.filter(isRecord).map(adaptRetrievalRegressionExcludedItem) : [],
     failures: Array.isArray(value.failures) ? value.failures.filter(isRecord).map(adaptRetrievalRegressionFailure) : []
@@ -1349,6 +1385,14 @@ function adaptRetrievalRegressionFailure(value: Record<string, unknown>): Retrie
     kind: stringOrFallback(value.kind, ''),
     id: stringOrFallback(value.id, ''),
     message: typeof value.message === 'string' ? value.message : undefined
+  };
+}
+
+function adaptRetrievalRegressionTriageHint(value: Record<string, unknown>): RetrievalRegressionTriageHint {
+  return {
+    itemId: stringOrFallback(value.itemId, ''),
+    severity: stringOrFallback(value.severity, ''),
+    message: stringOrFallback(value.message, '')
   };
 }
 
@@ -1742,7 +1786,7 @@ async function requestJsonOrNull(fetchImpl: FetchImpl, url: string, init?: Reque
   return response.json() as Promise<unknown>;
 }
 
-function jsonRequest(method: 'PUT' | 'POST', body: unknown): RequestInit {
+function jsonRequest(method: 'PATCH' | 'PUT' | 'POST', body: unknown): RequestInit {
   return {
     method,
     headers: { 'Content-Type': 'application/json' },
@@ -1771,7 +1815,8 @@ function adaptProjectSummary(value: unknown): ProjectSummary {
   return {
     id: value.id,
     title: stringOrFallback(value.title, 'Untitled project'),
-    status: typeof value.status === 'string' ? value.status : undefined
+    status: typeof value.status === 'string' ? value.status : undefined,
+    externalModelPolicy: value.externalModelPolicy === 'Disabled' ? 'Disabled' : 'Allowed'
   };
 }
 

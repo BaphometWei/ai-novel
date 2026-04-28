@@ -130,6 +130,10 @@ function serializeRetrievalResult(result: ReturnType<typeof evaluateRetrievalReg
       excludedCount: result.snapshot.excluded.length,
       failureCount: result.failures.length
     },
+    thresholds: result.thresholds,
+    includedIds: result.includedIds,
+    excludedIds: result.excludedIds,
+    triageHints: result.triageHints,
     included: result.snapshot.included,
     excluded: result.snapshot.excluded,
     failures: result.failures.map(serializeFailure)

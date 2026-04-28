@@ -5,3 +5,4 @@ export * from './openai-provider';
 export * from './provider-config';
 export * from './prompt-registry';
 export * from './redaction';
+export * from './secret-store';

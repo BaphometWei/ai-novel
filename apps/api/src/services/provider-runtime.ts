@@ -2,6 +2,7 @@ import type { BudgetPolicy, ProviderSettings, SettingsRepository } from '@ai-nov
 import type { ProviderAdapter } from '@ai-novel/domain';
 import {
   createFakeProvider,
+  createEnvSecretStore,
   createOpenAIProvider,
   LlmGateway,
   resolveProviderConfig,
@@ -17,7 +18,7 @@ export interface ProviderRuntimeOptions {
 }
 
 export interface ProviderRuntime {
-  createGateway(input: { promptVersionId: string }): Promise<LlmGateway>;
+  createGateway(input: { promptVersionId: string; allowExternalModel?: boolean }): Promise<LlmGateway>;
 }
 
 export async function createProviderRuntime(
@@ -25,9 +26,12 @@ export async function createProviderRuntime(
   options: ProviderRuntimeOptions = {}
 ): Promise<ProviderRuntime> {
   return {
-    async createGateway({ promptVersionId }) {
+    async createGateway({ promptVersionId, allowExternalModel = true }) {
       const openAISettings = await settings.findProviderSettings('openai');
       const openAIBudget = await settings.findBudgetPolicy('openai');
+      if (openAISettings?.provider === 'openai' && !allowExternalModel) {
+        throw new Error('External model use is disabled for this project');
+      }
       const gatewayOptions = createConfiguredGatewayOptions(openAISettings, openAIBudget, options);
 
       return new LlmGateway({
@@ -48,7 +52,7 @@ function createConfiguredGatewayOptions(
       provider: settings.provider,
       defaultModel: settings.defaultModel,
       secretRef: settings.secretRef,
-      env: options.env ?? process.env
+      secretStore: createEnvSecretStore(options.env ?? process.env)
     });
     return {
       provider: createOpenAIProvider({

@@ -3,6 +3,7 @@ import { createId, type EntityId } from '../shared/ids';
 
 export type ProjectStatus = 'Active' | 'Archived';
 export type ProjectLanguage = 'zh-CN' | 'en-US';
+export type ExternalModelPolicy = 'Allowed' | 'Disabled';
 
 export interface ReaderContract {
   targetAudience: string;
@@ -15,6 +16,7 @@ export interface Project {
   title: string;
   language: ProjectLanguage;
   status: ProjectStatus;
+  externalModelPolicy: ExternalModelPolicy;
   readerContract: ReaderContract;
   createdAt: string;
   updatedAt: string;
@@ -25,6 +27,7 @@ export function createProject(input: {
   language: ProjectLanguage;
   targetAudience: string;
   genrePromise?: string;
+  externalModelPolicy?: ExternalModelPolicy;
 }): Project {
   const now = systemClock.now();
 
@@ -33,6 +36,7 @@ export function createProject(input: {
     title: input.title,
     language: input.language,
     status: 'Active',
+    externalModelPolicy: input.externalModelPolicy ?? 'Allowed',
     readerContract: {
       targetAudience: input.targetAudience,
       genrePromise: input.genrePromise ?? 'Sustained long-form reader satisfaction',

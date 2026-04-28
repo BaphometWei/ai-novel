@@ -98,6 +98,18 @@ function RetrievalCaseCard({ label, result }: { label: string; result: Retrieval
             <dt>Excluded</dt>
             <dd>{result.excluded.map((item) => item.id).join(', ') || 'none'}</dd>
           </div>
+          <div>
+            <dt>Thresholds</dt>
+            <dd>{`required coverage ${formatPercent(result.thresholds.requiredCoverage)} / forbidden leakage ${formatPercent(
+              result.thresholds.forbiddenLeakage
+            )}`}</dd>
+          </div>
+          {result.triageHints.length > 0 ? (
+            <div>
+              <dt>Triage</dt>
+              <dd>{result.triageHints.map((hint) => hint.message).join(' ')}</dd>
+            </div>
+          ) : null}
           {result.failures.map((failure) => (
             <div key={`${failure.kind}-${failure.id}`}>
               <dt>{failure.kind}</dt>
@@ -108,6 +120,10 @@ function RetrievalCaseCard({ label, result }: { label: string; result: Retrieval
       ) : null}
     </section>
   );
+}
+
+function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
 }
 
 const passingInput: RetrievalProjectRegressionInput = {

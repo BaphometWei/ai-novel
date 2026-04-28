@@ -8,6 +8,7 @@ const statements = [
     title TEXT NOT NULL,
     language TEXT NOT NULL,
     status TEXT NOT NULL,
+    external_model_policy TEXT NOT NULL DEFAULT 'Allowed',
     reader_contract_json TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -469,6 +470,7 @@ export async function migrateDatabase(client: Client): Promise<void> {
   }
 
   await ensureColumn(client, 'artifacts', 'related_run_id', 'TEXT');
+  await ensureColumn(client, 'projects', 'external_model_policy', "TEXT NOT NULL DEFAULT 'Allowed'");
   await ensureColumn(client, 'durable_jobs', 'available_at', 'TEXT');
   await ensureColumn(client, 'durable_jobs', 'lease_owner', 'TEXT');
   await ensureColumn(client, 'durable_jobs', 'lease_expires_at', 'TEXT');

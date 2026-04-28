@@ -5,6 +5,7 @@ export const projects = sqliteTable('projects', {
   title: text('title').notNull(),
   language: text('language').notNull(),
   status: text('status').notNull(),
+  externalModelPolicy: text('external_model_policy').notNull().default('Allowed'),
   readerContractJson: text('reader_contract_json').notNull(),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull()
