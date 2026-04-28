@@ -1,3 +1,5 @@
+import { defaultQualityThresholdConfig, type RetrievalQualityThresholds } from './quality-thresholds';
+
 export interface RetrievalRegressionItem {
   id: string;
   text?: string;
@@ -22,16 +24,14 @@ export interface EvaluateRetrievalRegressionInput {
   forbidden: RetrievalRegressionItem[];
   included: RetrievalRegressionItem[];
   excluded: RetrievalRegressionExcludedItem[];
+  thresholds?: RetrievalQualityThresholds;
 }
 
 export type RetrievalRegressionFailure =
   | { type: 'must_include_missing'; itemId: string }
   | { type: 'forbidden_included'; itemId: string };
 
-export interface RetrievalRegressionThresholds {
-  requiredCoverage: number;
-  forbiddenLeakage: number;
-}
+export type RetrievalRegressionThresholds = RetrievalQualityThresholds;
 
 export interface RetrievalRegressionTriageHint {
   itemId: string;
@@ -62,6 +62,7 @@ export interface RetrievalRegressionResult {
 }
 
 export function evaluateRetrievalRegression(input: EvaluateRetrievalRegressionInput): RetrievalRegressionResult {
+  const thresholds = input.thresholds ?? defaultQualityThresholdConfig.retrieval;
   const includedIds = input.included.map((item) => item.id);
   const excludedIds = input.excluded.map((item) => item.id);
   const includedIdSet = new Set(includedIds);
@@ -98,12 +99,15 @@ export function evaluateRetrievalRegression(input: EvaluateRetrievalRegressionIn
     projectId: input.projectId,
     query: input.query,
     policyId: input.policy.id,
-    passed: failures.length === 0,
+    passed: passesThresholds({
+      mustIncludeCount: input.mustInclude.length,
+      forbiddenCount: input.forbidden.length,
+      missingRequiredCount: failures.filter((failure) => failure.type === 'must_include_missing').length,
+      forbiddenIncludedCount: failures.filter((failure) => failure.type === 'forbidden_included').length,
+      thresholds
+    }),
     failures,
-    thresholds: {
-      requiredCoverage: 1,
-      forbiddenLeakage: 0
-    },
+    thresholds,
     includedIds,
     excludedIds,
     triageHints,
@@ -115,4 +119,18 @@ export function evaluateRetrievalRegression(input: EvaluateRetrievalRegressionIn
       failures
     }
   };
+}
+
+function passesThresholds(input: {
+  mustIncludeCount: number;
+  forbiddenCount: number;
+  missingRequiredCount: number;
+  forbiddenIncludedCount: number;
+  thresholds: RetrievalQualityThresholds;
+}): boolean {
+  const coverage =
+    input.mustIncludeCount === 0 ? 1 : (input.mustIncludeCount - input.missingRequiredCount) / input.mustIncludeCount;
+  const leakage = input.forbiddenCount === 0 ? 0 : input.forbiddenIncludedCount / input.forbiddenCount;
+
+  return coverage >= input.thresholds.requiredCoverage && leakage <= input.thresholds.forbiddenLeakage;
 }

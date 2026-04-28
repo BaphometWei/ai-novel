@@ -3,6 +3,7 @@ import {
   createApiClient,
   type RetrievalEvaluationApiClient,
   type RetrievalProjectRegressionInput,
+  type QualityThresholdConfig,
   type RetrievalRegressionResult
 } from '../api/client';
 
@@ -17,6 +18,7 @@ export function RetrievalEvaluationPanel({ client, projectId }: RetrievalEvaluat
   const hasProject = activeProjectId.trim().length > 0;
   const [passingResult, setPassingResult] = useState<RetrievalRegressionResult | null>(null);
   const [failingResult, setFailingResult] = useState<RetrievalRegressionResult | null>(null);
+  const [thresholdConfig, setThresholdConfig] = useState<QualityThresholdConfig | null>(null);
   const [loading, setLoading] = useState(hasProject);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,6 +27,7 @@ export function RetrievalEvaluationPanel({ client, projectId }: RetrievalEvaluat
     if (!hasProject) {
       setPassingResult(null);
       setFailingResult(null);
+      setThresholdConfig(null);
       setError(null);
       setLoading(false);
       return () => {
@@ -36,11 +39,19 @@ export function RetrievalEvaluationPanel({ client, projectId }: RetrievalEvaluat
       setLoading(true);
       setError(null);
       try {
+        const config = await resolvedClient.getQualityThresholds();
         const [passed, failed] = await Promise.all([
-          resolvedClient.runProjectRetrievalRegression(activeProjectId, passingInput),
-          resolvedClient.runProjectRetrievalRegression(activeProjectId, failingInput)
+          resolvedClient.runProjectRetrievalRegression(activeProjectId, {
+            ...passingInput,
+            thresholds: config.retrieval
+          }),
+          resolvedClient.runProjectRetrievalRegression(activeProjectId, {
+            ...failingInput,
+            thresholds: config.retrieval
+          })
         ]);
         if (!cancelled) {
+          setThresholdConfig(config);
           setPassingResult(passed);
           setFailingResult(failed);
         }
@@ -68,6 +79,14 @@ export function RetrievalEvaluationPanel({ client, projectId }: RetrievalEvaluat
       {error ? <p role="alert">{error}</p> : null}
       {!hasProject ? <p>No project available.</p> : null}
       {loading ? <p>Running retrieval regression...</p> : null}
+      {thresholdConfig ? (
+        <section className="work-surface" aria-label="Retrieval quality thresholds">
+          <h3>Quality Thresholds</h3>
+          <p>{thresholdConfig.source}</p>
+          <p>Required coverage {formatPercent(thresholdConfig.retrieval.requiredCoverage)}</p>
+          <p>Forbidden leakage {formatPercent(thresholdConfig.retrieval.forbiddenLeakage)}</p>
+        </section>
+      ) : null}
 
       <div className="panel-grid">
         <RetrievalCaseCard label="Passing retrieval case" result={passingResult} />

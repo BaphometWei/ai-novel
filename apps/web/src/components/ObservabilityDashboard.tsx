@@ -49,9 +49,23 @@ function ObservabilitySummary({ summary }: { summary: ProductObservabilitySummar
   const runError = summary.runErrors[0];
   const bottleneck = summary.workflowBottlenecks[0];
   const dataQuality = summary.dataQuality ?? summary.quality;
+  const insufficientData =
+    summary.quality.status === 'InsufficientData' ||
+    summary.adoption.status === 'InsufficientData' ||
+    (summary.modelUsage.length === 0 &&
+      summary.runErrors.length === 0 &&
+      summary.workflowBottlenecks.length === 0 &&
+      summary.tokens.total === 0);
 
   return (
-    <dl className="compact-list">
+    <>
+      {insufficientData ? (
+        <section className="work-surface" aria-label="Observability insufficient data">
+          <h3>Insufficient observation data.</h3>
+          <p>Run a local workflow or import a snapshot to populate observability.</p>
+        </section>
+      ) : null}
+      <dl className="compact-list">
       <div>
         <dt>Cost</dt>
         <dd>
@@ -117,7 +131,8 @@ function ObservabilitySummary({ summary }: { summary: ProductObservabilitySummar
           {formatInteger(dataQuality.openIssueCount)} open, {formatInteger(dataQuality.highSeverityOpenCount)} high
         </dd>
       </div>
-    </dl>
+      </dl>
+    </>
   );
 }
 

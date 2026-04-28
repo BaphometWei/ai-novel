@@ -1,4 +1,7 @@
 import Fastify from 'fastify';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { registerBackupRoutes } from '../routes/backup.routes';
 import { createPersistentApiRuntime } from '../runtime';
@@ -167,12 +170,183 @@ describe('backup API routes', () => {
       runtime.database.client.close();
     }
   });
+
+  it('rehearses temp SQLite backup verify restore rollback and cross-project isolation', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ai-novel-recovery-'));
+    const runtime = await createPersistentApiRuntime(join(root, 'recovery.sqlite'));
+
+    try {
+      const source = await createProject(runtime.app, 'Recovery Source');
+      const untouched = await createProject(runtime.app, 'Recovery Untouched');
+      const sourceChapter = await createChapter(runtime.app, source.id, {
+        title: 'Recovery Source Chapter',
+        body: 'Only the source chapter belongs in the backup envelope.'
+      });
+      const untouchedChapter = await createChapter(runtime.app, untouched.id, {
+        title: 'Untouched Chapter',
+        body: 'This unrelated project must stay out of the source backup.'
+      });
+
+      const backupResponse = await runtime.app.inject({
+        method: 'POST',
+        url: `/projects/${source.id}/backups`,
+        payload: { reason: 'local-recovery-rehearsal', requestedBy: 'operator' }
+      });
+      expect(backupResponse.statusCode).toBe(201);
+      const backup = backupResponse.json();
+
+      const verifyResponse = await runtime.app.inject({
+        method: 'POST',
+        url: '/backups/verify',
+        payload: { path: backup.record.path }
+      });
+      expect(verifyResponse.statusCode).toBe(200);
+      expect(verifyResponse.json()).toMatchObject({
+        status: { ok: true, stage: 'verified', hash: backup.record.hash }
+      });
+
+      const envelope = JSON.parse(
+        await readFile(join(root, 'backups', backup.record.path), 'utf8')
+      ) as {
+        payload: {
+          project: { id: string };
+          manuscripts: Array<{ projectId: string; chapters: Array<{ title: string }> }>;
+          artifacts: Array<{ id: string }>;
+          runs: Array<{ id: string }>;
+        };
+      };
+      const artifactIds = envelope.payload.artifacts.map((artifact) => artifact.id);
+
+      expect(envelope.payload.project.id).toBe(source.id);
+      expect(envelope.payload.manuscripts.map((manuscript) => manuscript.projectId)).toEqual([source.id]);
+      expect(envelope.payload.manuscripts[0].chapters.map((chapter) => chapter.title)).toEqual([
+        'Recovery Source Chapter'
+      ]);
+      expect(artifactIds).toContain(sourceChapter.version.bodyArtifactId);
+      expect(artifactIds).not.toContain(untouchedChapter.version.bodyArtifactId);
+      expect(envelope.payload.runs).toEqual([]);
+
+      const restoredProjectId = 'project_recovery_restored';
+      const restoreResponse = await runtime.app.inject({
+        method: 'POST',
+        url: '/backups/restore',
+        payload: { path: backup.record.path, targetProjectId: restoredProjectId, requestedBy: 'operator' }
+      });
+      expect(restoreResponse.statusCode).toBe(200);
+      const restore = restoreResponse.json();
+      expect(restore).toMatchObject({
+        record: {
+          backupId: backup.record.id,
+          sourceProjectId: source.id,
+          targetProjectId: restoredProjectId,
+          rollbackActions: [{ type: 'delete_project', targetId: restoredProjectId }]
+        },
+        status: { ok: true, stage: 'restored', hash: backup.record.hash }
+      });
+
+      await expect(runtime.stores.workflow.durableJobs.findById(restore.record.id)).resolves.toMatchObject({
+        id: restore.record.id,
+        workflowType: 'backup.restore',
+        payload: {
+          targetProjectId: restoredProjectId,
+          rollbackActions: [{ type: 'delete_project', targetId: restoredProjectId }]
+        }
+      });
+
+      const restoredChaptersResponse = await runtime.app.inject({
+        method: 'GET',
+        url: `/projects/${restoredProjectId}/chapters`
+      });
+      expect(restoredChaptersResponse.statusCode).toBe(200);
+      const restoredChapters = restoredChaptersResponse.json();
+      expect(restoredChapters).toEqual([
+        expect.objectContaining({
+          title: 'Recovery Source Chapter'
+        })
+      ]);
+
+      const restoredBodyResponse = await runtime.app.inject({
+        method: 'GET',
+        url: `/chapters/${restoredChapters[0].id}/current-body`
+      });
+      expect(restoredBodyResponse.statusCode).toBe(200);
+      expect(restoredBodyResponse.json()).toMatchObject({
+        body: 'Only the source chapter belongs in the backup envelope.'
+      });
+
+      const untouchedChaptersResponse = await runtime.app.inject({
+        method: 'GET',
+        url: `/projects/${untouched.id}/chapters`
+      });
+      expect(untouchedChaptersResponse.statusCode).toBe(200);
+      expect(untouchedChaptersResponse.json()).toEqual([
+        expect.objectContaining({
+          title: 'Untouched Chapter',
+          versions: [
+            expect.objectContaining({
+              bodyArtifactId: untouchedChapter.version.bodyArtifactId
+            })
+          ]
+        })
+      ]);
+    } finally {
+      await runtime.database.client.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+      await runtime.app.close();
+      runtime.database.client.close();
+      await removeTempRoot(root);
+    }
+  }, 15_000);
 });
 
 async function createBackupFixture(app: ReturnType<typeof Fastify>) {
   const response = await app.inject({ method: 'POST', url: '/projects/project_1/backups', payload: {} });
   expect(response.statusCode).toBe(201);
   return response.json();
+}
+
+async function removeTempRoot(root: string) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+      return;
+    } catch (error) {
+      if (attempt === 19) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
+async function createProject(app: ReturnType<typeof Fastify>, title: string) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/projects',
+    payload: {
+      title,
+      language: 'en-US',
+      targetAudience: 'serial fiction readers'
+    }
+  });
+  expect(response.statusCode).toBe(201);
+  return response.json() as { id: string; title: string };
+}
+
+async function createChapter(
+  app: ReturnType<typeof Fastify>,
+  projectId: string,
+  input: { title: string; body: string }
+) {
+  const response = await app.inject({
+    method: 'POST',
+    url: `/projects/${projectId}/chapters`,
+    payload: {
+      title: input.title,
+      order: 1,
+      body: input.body,
+      status: 'Accepted'
+    }
+  });
+  expect(response.statusCode).toBe(201);
+  return response.json() as { version: { bodyArtifactId: string } };
 }
 
 function createMemoryDependencies(options: { now: string; ids: string[] }): BackupWorkflowDependencies & {

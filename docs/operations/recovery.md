@@ -55,14 +55,15 @@ After database and artifact paths are safe, start the local app using repository
 
 ```powershell
 npm install
-npm run dev
+npm run dev:api
+npm run dev:web
 ```
 
-Use package-specific dev scripts only if the root script is unavailable:
+Use package-specific workspace scripts only if the root aliases are unavailable:
 
 ```powershell
-npm run dev --workspace apps/api
-npm run dev --workspace apps/web
+npm --workspace @ai-novel/api run dev
+npm --workspace @ai-novel/web run dev
 ```
 
 Keep terminal output local. Redact provider keys, bearer tokens, manuscript excerpts, and generated model output before sharing logs.
@@ -75,7 +76,15 @@ Run the full local verification path after recovery, restore, or rollback:
 npm run verify:local
 ```
 
-Expected result: the command exits with code 0 and reports no failed tests. If the script prints package-level summaries instead of a single success line, confirm each build, database check, Vitest run, and Playwright run completed successfully.
+Expected result: the command exits with code 0 and reports no failed tests. This command runs unit tests, build, DB checks, the local production-like rehearsal, and Playwright. If the script prints package-level summaries instead of a single success line, confirm each build, database check, rehearsal, Vitest run, and Playwright run completed successfully.
+
+Run the production-like rehearsal by itself when validating only local recovery mechanics:
+
+```powershell
+npm run rehearse:local-production
+```
+
+The rehearsal script creates a temporary workspace, runs a real SQLite-backed API flow, creates a project and chapter, creates a backup, verifies it, restores it into a new project, checks the restored project, and removes the temporary workspace after the Vitest child process exits.
 
 Focused read-only documentation checks can verify that recovery and blocker notes are present:
 
@@ -119,6 +128,7 @@ Verify every backup before trusting it:
 - Confirm artifact paths referenced in metadata exist in the copied artifact directory.
 - Run SQLite `quick_check` and `integrity_check` on copied database files when the backup includes raw SQLite.
 - Record the source commit, source project id, backup path, created timestamp, requester, and verification result.
+- For project backups, confirm unrelated project artifacts and runs are absent from the backup envelope.
 
 ## Restore Rehearsal
 
@@ -129,10 +139,24 @@ Rehearse restore into an isolated target project before replacing existing data:
 3. Restore the backup into a new target project id.
 4. Start local services.
 5. Confirm the restored project opens, manuscripts load, artifacts resolve, approvals are visible, durable jobs have expected status, and observability summaries do not invent missing data.
-6. Run `npm run verify:local`.
-7. Record rehearsal outcome and any manual fixes.
+6. Confirm the restore record includes rollback actions, especially `delete_project` for new-target rehearsal restores.
+7. Confirm unrelated projects still load with their original chapters and artifact references.
+8. Run `npm run rehearse:local-production` for a focused rehearsal or `npm run verify:local` for the full local gate.
+9. Record rehearsal outcome and any manual fixes.
 
 Only after a successful rehearsal should an operator approve a replace-in-place restore.
+
+## Migration Failure Recovery
+
+If a migration fails locally:
+
+1. Stop API, web, worker, and test processes.
+2. Preserve the database, WAL, SHM, artifact directory, and migration logs in a dated quarantine directory.
+3. Restore the newest verified pre-migration database copy and its sidecars together.
+4. Run `npm run db:check`.
+5. Run `npm run rehearse:local-production` to confirm migrations and local recovery flows can still run against a temporary workspace.
+6. Re-run the failed migration only after the error is understood and a new local backup exists.
+7. If the migration partially wrote rows before failing, compare the quarantine copy with the restored database before deleting anything.
 
 ## Rollback Metadata
 

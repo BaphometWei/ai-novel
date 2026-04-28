@@ -4,6 +4,7 @@ const commands = [
   ['npm', ['test']],
   ['npm', ['run', 'build']],
   ['npm', ['run', 'db:check']],
+  ['npm', ['run', 'rehearse:local-production']],
   ['npm', ['run', 'test:e2e']]
 ];
 

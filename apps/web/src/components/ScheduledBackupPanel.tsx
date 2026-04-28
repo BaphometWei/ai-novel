@@ -65,6 +65,8 @@ export function ScheduledBackupPanel({ client, now = '2026-04-27T12:00:00.000Z' 
     }
   }
 
+  const runnablePolicyId = due?.policies[0]?.id ?? policies[0]?.id;
+
   return (
     <section className="surface-panel" aria-labelledby="scheduled-backups-title">
       <header className="panel-header">
@@ -78,6 +80,7 @@ export function ScheduledBackupPanel({ client, now = '2026-04-27T12:00:00.000Z' 
       <div className="panel-grid">
         <section className="work-surface" aria-label="Scheduled backup policies">
           <h3>Policies</h3>
+          {!loading && policies.length === 0 ? <p>No scheduled backup policies.</p> : null}
           <dl className="compact-list">
             {policies.map((policy) => (
               <div key={policy.id}>
@@ -94,6 +97,7 @@ export function ScheduledBackupPanel({ client, now = '2026-04-27T12:00:00.000Z' 
 
         <section className="work-surface" aria-label="Due backup intents">
           <h3>Due Intents</h3>
+          {!loading && (due?.intents ?? []).length === 0 ? <p>No due backup intents.</p> : null}
           <dl className="compact-list">
             {(due?.intents ?? []).map((intent) => (
               <div key={intent.id}>
@@ -105,10 +109,10 @@ export function ScheduledBackupPanel({ client, now = '2026-04-27T12:00:00.000Z' 
               </div>
             ))}
           </dl>
-          <button type="button" onClick={() => void recordRun('Succeeded')} disabled={running}>
+          <button type="button" onClick={() => void recordRun('Succeeded')} disabled={running || !runnablePolicyId}>
             Mark success
           </button>
-          <button type="button" onClick={() => void recordRun('Failed')} disabled={running}>
+          <button type="button" onClick={() => void recordRun('Failed')} disabled={running || !runnablePolicyId}>
             Mark failure
           </button>
         </section>

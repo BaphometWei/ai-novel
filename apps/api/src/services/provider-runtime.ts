@@ -29,7 +29,7 @@ export async function createProviderRuntime(
     async createGateway({ promptVersionId, allowExternalModel = true }) {
       const openAISettings = await settings.findProviderSettings('openai');
       const openAIBudget = await settings.findBudgetPolicy('openai');
-      if (openAISettings?.provider === 'openai' && !allowExternalModel) {
+      if (isExternalProvider(openAISettings) && !allowExternalModel) {
         throw new Error('External model use is disabled for this project');
       }
       const gatewayOptions = createConfiguredGatewayOptions(openAISettings, openAIBudget, options);
@@ -40,6 +40,10 @@ export async function createProviderRuntime(
       });
     }
   };
+}
+
+function isExternalProvider(settings: ProviderSettings | null): boolean {
+  return Boolean(settings && settings.provider !== 'fake');
 }
 
 function createConfiguredGatewayOptions(

@@ -49,6 +49,13 @@ describe('ObservabilityDashboard', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Observability summary failed');
   });
+
+  it('shows insufficient-data state when the API has no observation samples', async () => {
+    render(<ObservabilityDashboard client={mockObservabilityClient({ summary: insufficientObservabilitySummary })} />);
+
+    expect(await screen.findByText('Insufficient observation data.')).toBeInTheDocument();
+    expect(screen.getByText('Run a local workflow or import a snapshot to populate observability.')).toBeInTheDocument();
+  });
 });
 
 describe('observability API client helpers', () => {
@@ -78,11 +85,11 @@ describe('observability API client helpers', () => {
   });
 });
 
-function mockObservabilityClient(options: { reject?: boolean } = {}): ObservabilityApiClient {
+function mockObservabilityClient(options: { reject?: boolean; summary?: ProductObservabilitySummary } = {}): ObservabilityApiClient {
   return {
     loadObservabilitySummary: async (_input?: { projectId?: string }) => {
       if (options.reject) throw new Error('Observability summary failed');
-      return observabilitySummary;
+      return options.summary ?? observabilitySummary;
     }
   };
 }
@@ -151,6 +158,33 @@ const observabilitySummary: ProductObservabilitySummary = {
   dataQuality: {
     openIssueCount: 4,
     highSeverityOpenCount: 2
+  }
+};
+
+const insufficientObservabilitySummary: ProductObservabilitySummary = {
+  cost: { totalUsd: 0, averageUsdPerRun: 0 },
+  latency: { averageDurationMs: 0, p95DurationMs: 0 },
+  tokens: { total: 0, averagePerRun: 0 },
+  quality: {
+    status: 'InsufficientData',
+    acceptedRate: 0,
+    openIssueCount: 0,
+    highSeverityOpenCount: 0,
+    outcomes: {}
+  },
+  adoption: {
+    status: 'InsufficientData',
+    adoptedRate: 0,
+    partialRate: 0,
+    rejectedRate: 0,
+    byFeature: {}
+  },
+  modelUsage: [],
+  runErrors: [],
+  workflowBottlenecks: [],
+  dataQuality: {
+    openIssueCount: 0,
+    highSeverityOpenCount: 0
   }
 };
 

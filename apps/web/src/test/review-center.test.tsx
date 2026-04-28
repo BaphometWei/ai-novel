@@ -90,6 +90,34 @@ describe('review center revision diff flow', () => {
     expect(screen.getByText('Action ApplyRevision recorded.')).toBeInTheDocument();
   });
 
+  it('shows an API-backed empty state without rendering demo findings when there are no reports', async () => {
+    const client = createApiClient({
+      baseUrl: '/api',
+      fetchImpl: vi.fn(async (url: string | URL | Request) => {
+        if (String(url) === '/api/projects/project_empty/review/reports') return jsonResponse([]);
+        return jsonResponse({ error: 'Not found' }, false, 404);
+      })
+    });
+
+    render(<ReviewCenter client={client} projectId="project_empty" />);
+
+    expect(await screen.findByText('No review findings yet.')).toBeInTheDocument();
+    expect(screen.queryByText('High risk knowledge-boundary issue in chapter 12 draft.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Quality 76')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Apply' })).not.toBeInTheDocument();
+  });
+
+  it('shows a no-project empty state without calling the review API', () => {
+    const fetchImpl = vi.fn();
+    const client = createApiClient({ baseUrl: '/api', fetchImpl });
+
+    render(<ReviewCenter client={client} />);
+
+    expect(screen.getByText('No project available.')).toBeInTheDocument();
+    expect(screen.queryByText('High risk knowledge-boundary issue in chapter 12 draft.')).not.toBeInTheDocument();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('receives the shared App API client after a project is selected', async () => {
     const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const path = String(url);

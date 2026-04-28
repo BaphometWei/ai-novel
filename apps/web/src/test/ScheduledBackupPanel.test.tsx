@@ -43,6 +43,15 @@ describe('ScheduledBackupPanel', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Scheduled backup load failed');
   });
+
+  it('shows explicit empty states and disables run actions when no scheduled backup data exists', async () => {
+    render(<ScheduledBackupPanel client={mockScheduledBackupClient({ empty: true })} />);
+
+    expect(await screen.findByText('No scheduled backup policies.')).toBeInTheDocument();
+    expect(screen.getByText('No due backup intents.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mark success' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Mark failure' })).toBeDisabled();
+  });
 });
 
 describe('scheduled backup API client helpers', () => {
@@ -74,14 +83,15 @@ describe('scheduled backup API client helpers', () => {
   });
 });
 
-function mockScheduledBackupClient(options: { rejectList?: boolean } = {}): ScheduledBackupApiClient {
+function mockScheduledBackupClient(options: { rejectList?: boolean; empty?: boolean } = {}): ScheduledBackupApiClient {
   return {
     upsertScheduledBackupPolicy: async () => policy,
     listScheduledBackupPolicies: async () => {
       if (options.rejectList) throw new Error('Scheduled backup load failed');
+      if (options.empty) return [];
       return [policy];
     },
-    listDueScheduledBackups: async () => dueResult,
+    listDueScheduledBackups: async () => (options.empty ? { policies: [], intents: [] } : dueResult),
     recordScheduledBackupRun: async (_id, input) => ({
       ...updatedPolicy,
       lastRunStatus: input.status

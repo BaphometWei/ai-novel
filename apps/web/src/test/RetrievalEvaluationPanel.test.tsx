@@ -17,6 +17,9 @@ describe('RetrievalEvaluationPanel', () => {
 
     expect(screen.getByRole('heading', { name: 'Retrieval Evaluation' })).toBeInTheDocument();
     expect(screen.getByText('Running retrieval regression...')).toBeInTheDocument();
+    expect(await screen.findByText('synthetic-local-defaults')).toBeInTheDocument();
+    expect(screen.getByText('Required coverage 100%')).toBeInTheDocument();
+    expect(screen.getByText('Forbidden leakage 0%')).toBeInTheDocument();
 
     const passed = await screen.findByLabelText('Passing retrieval case');
     expect(within(passed).getByText('Passed')).toBeInTheDocument();
@@ -34,8 +37,9 @@ describe('RetrievalEvaluationPanel', () => {
     expect(within(failed).getByText('Triage')).toBeInTheDocument();
     expect(within(failed).getByText('Required scene was excluded.')).toBeInTheDocument();
     expect(within(failed).getByText('Forbidden source was included.')).toBeInTheDocument();
-    expect(runProjectRetrievalRegression).toHaveBeenNthCalledWith(1, 'project_1', passingRunInput);
-    expect(runProjectRetrievalRegression).toHaveBeenNthCalledWith(2, 'project_1', failingRunInput);
+    expect(runProjectRetrievalRegression).toHaveBeenNthCalledWith(1, 'project_1', passingRunInputWithThresholds);
+    expect(runProjectRetrievalRegression).toHaveBeenNthCalledWith(2, 'project_1', failingRunInputWithThresholds);
+    expect(client.getQualityThresholds).toHaveBeenCalledOnce();
     expect(JSON.stringify(runProjectRetrievalRegression.mock.calls)).not.toContain('included');
     expect(client.evaluateRetrievalRegression).not.toHaveBeenCalled();
   });
@@ -84,6 +88,7 @@ describe('retrieval evaluation API client helpers', () => {
 
 function mockRetrievalClient(options: { reject?: boolean } = {}): RetrievalEvaluationApiClient {
   return {
+    getQualityThresholds: vi.fn(async () => qualityThresholdConfig),
     runProjectRetrievalRegression: vi.fn(async (_projectId, input) => {
       if (options.reject) throw new Error('Retrieval evaluation failed');
       return input.caseId === 'case_retrieval_pass' ? passingResult : failingResult;
@@ -116,6 +121,15 @@ const failingInput = {
 
 const { included: _passingIncluded, excluded: _passingExcluded, projectId: _passingProjectId, ...passingRunInput } = passingInput;
 const { included: _failingIncluded, excluded: _failingExcluded, projectId: _failingProjectId, ...failingRunInput } = failingInput;
+const qualityThresholdConfig = {
+  source: 'synthetic-local-defaults',
+  retrieval: {
+    requiredCoverage: 1,
+    forbiddenLeakage: 0
+  }
+};
+const passingRunInputWithThresholds = { ...passingRunInput, thresholds: qualityThresholdConfig.retrieval };
+const failingRunInputWithThresholds = { ...failingRunInput, thresholds: qualityThresholdConfig.retrieval };
 
 const passingResult = {
   caseId: 'case_retrieval_pass',

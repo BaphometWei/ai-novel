@@ -1,4 +1,8 @@
-import { evaluateRetrievalRegression, type EvaluateRetrievalRegressionInput } from '@ai-novel/evaluation';
+import {
+  defaultQualityThresholdConfig,
+  evaluateRetrievalRegression,
+  type EvaluateRetrievalRegressionInput
+} from '@ai-novel/evaluation';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 
@@ -31,6 +35,11 @@ const retrievalExcludedItemSchema = z.object({
   reason: z.string().min(1)
 });
 
+const retrievalThresholdSchema = z.object({
+  requiredCoverage: z.number().min(0).max(1),
+  forbiddenLeakage: z.number().min(0).max(1)
+});
+
 const retrievalRegressionSchema = z.object({
   caseId: z.string().min(1),
   projectId: z.string().min(1),
@@ -42,7 +51,8 @@ const retrievalRegressionSchema = z.object({
   mustInclude: z.array(retrievalItemSchema),
   forbidden: z.array(retrievalItemSchema),
   included: z.array(retrievalItemSchema),
-  excluded: z.array(retrievalExcludedItemSchema)
+  excluded: z.array(retrievalExcludedItemSchema),
+  thresholds: retrievalThresholdSchema.optional()
 });
 
 const projectRetrievalRunSchema = retrievalRegressionSchema
@@ -72,6 +82,10 @@ export function registerRetrievalRoutes(
   dependencies: RetrievalRouteDependencies = { evaluate: evaluateRetrievalRegression }
 ) {
   const evaluate = dependencies.evaluate ?? evaluateRetrievalRegression;
+
+  app.get('/retrieval/quality-thresholds', async (_request, reply) => {
+    return reply.send(defaultQualityThresholdConfig);
+  });
 
   app.post<{ Params: { projectId: string } }>('/retrieval/projects/:projectId/regression/run', async (request, reply) => {
     const parsed = projectRetrievalRunSchema.safeParse(request.body);

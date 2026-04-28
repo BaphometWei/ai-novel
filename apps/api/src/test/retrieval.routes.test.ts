@@ -2,6 +2,26 @@ import { describe, expect, it } from 'vitest';
 import { buildApp } from '../app';
 
 describe('retrieval evaluation API routes', () => {
+  it('exposes synthetic local quality thresholds for retrieval evaluation', async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/retrieval/quality-thresholds'
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      source: 'synthetic-local-defaults',
+      retrieval: {
+        requiredCoverage: 1,
+        forbiddenLeakage: 0
+      }
+    });
+
+    await app.close();
+  });
+
   it('runs a project-backed retrieval regression without trusting browser supplied included snapshots', async () => {
     const searches: unknown[] = [];
     const app = buildApp({
@@ -40,6 +60,10 @@ describe('retrieval evaluation API routes', () => {
           { id: 'fact_lantern_owner', text: 'Mara keeps the lantern.' }
         ],
         forbidden: [{ id: 'draft_false_key', text: 'The key is under the mat.' }],
+        thresholds: {
+          requiredCoverage: 0.5,
+          forbiddenLeakage: 0.5
+        },
         maxResults: 10
       }
     });
@@ -58,8 +82,8 @@ describe('retrieval evaluation API routes', () => {
         failureCount: 2
       },
       thresholds: {
-        requiredCoverage: 1,
-        forbiddenLeakage: 0
+        requiredCoverage: 0.5,
+        forbiddenLeakage: 0.5
       },
       includedIds: ['fact_key_location', 'draft_false_key'],
       excludedIds: ['fact_lantern_owner'],
@@ -105,6 +129,10 @@ describe('retrieval evaluation API routes', () => {
           { id: 'fact_lantern_owner', text: 'Mara keeps the lantern.' }
         ],
         forbidden: [{ id: 'draft_false_key', text: 'The key is under the mat.' }],
+        thresholds: {
+          requiredCoverage: 0.5,
+          forbiddenLeakage: 0.5
+        },
         included: [
           { id: 'fact_key_location', text: 'The observatory key is in the lantern.' },
           { id: 'draft_false_key', text: 'The key is under the mat.' }
@@ -126,8 +154,8 @@ describe('retrieval evaluation API routes', () => {
         failureCount: 2
       },
       thresholds: {
-        requiredCoverage: 1,
-        forbiddenLeakage: 0
+        requiredCoverage: 0.5,
+        forbiddenLeakage: 0.5
       },
       includedIds: ['fact_key_location', 'draft_false_key'],
       excludedIds: ['old_outline'],
@@ -164,6 +192,34 @@ describe('retrieval evaluation API routes', () => {
       method: 'POST',
       url: '/retrieval/regression/evaluate',
       payload: { caseId: '' }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: 'Invalid retrieval regression payload' });
+
+    await app.close();
+  });
+
+  it('rejects invalid quality threshold overrides', async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/retrieval/regression/evaluate',
+      payload: {
+        caseId: 'retrieval_case_bad_threshold',
+        projectId: 'project_1',
+        query: 'observatory key',
+        policy: { id: 'policy_v3' },
+        mustInclude: [],
+        forbidden: [],
+        included: [],
+        excluded: [],
+        thresholds: {
+          requiredCoverage: 2,
+          forbiddenLeakage: 0
+        }
+      }
     });
 
     expect(response.statusCode).toBe(400);

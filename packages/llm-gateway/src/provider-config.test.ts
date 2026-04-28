@@ -58,10 +58,10 @@ describe('Provider config', () => {
       resolveProviderConfig({
         provider: 'openai',
         defaultModel: 'gpt-test',
-        secretRef: 'vault:OPENAI_API_KEY',
+        secretRef: 'keychain:openai',
         secretStore: createEnvSecretStore({})
       })
-    ).toThrow('Unsupported provider secret reference: vault:OPENAI_API_KEY');
+    ).toThrow('Unsupported provider secret reference: keychain:openai');
   });
 
   it('supports injected provider secret stores for runtime boundaries', () => {

@@ -15,6 +15,7 @@
     "dev:api": "npm --workspace @ai-novel/api run dev",
     "dev:web": "npm --workspace @ai-novel/web run dev",
     "db:check": "npm --workspace @ai-novel/db run db:check",
+    "rehearse:local-production": "node scripts/local-production-rehearsal.mjs",
     "verify:local": "node scripts/verify-local-production.mjs"
   },
   "devDependencies": {

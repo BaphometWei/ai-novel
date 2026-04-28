@@ -1,5 +1,7 @@
 # Local-Only Hardening Completion Implementation Plan
 
+> Superseded by `2026-04-28-strict-local-gap-closure.md` for strict 10-point closure tracking. This earlier plan recorded partial local-hardening work and must not be read as full completion of the 10 gaps.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Finish the production-hardening gaps that do not depend on live provider credentials, CI secrets, code signing, release channels, OS keychain selection, or product-owner quality thresholds.

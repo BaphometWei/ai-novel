@@ -303,12 +303,14 @@ export interface ProductObservabilitySummary {
     averagePerRun: number;
   };
   quality: {
+    status?: string;
     acceptedRate: number;
     openIssueCount: number;
     highSeverityOpenCount: number;
     outcomes: Record<string, number>;
   };
   adoption: {
+    status?: string;
     adoptedRate: number;
     partialRate: number;
     rejectedRate: number;
@@ -662,6 +664,7 @@ export interface GovernanceApiClient {
 }
 
 export interface RetrievalEvaluationApiClient {
+  getQualityThresholds(): Promise<QualityThresholdConfig>;
   runProjectRetrievalRegression(
     projectId: string,
     input: RetrievalProjectRegressionInput
@@ -790,6 +793,7 @@ export interface RetrievalRegressionInput {
   forbidden: RetrievalRegressionItem[];
   included: RetrievalRegressionItem[];
   excluded: RetrievalRegressionExcludedItem[];
+  thresholds?: RetrievalQualityThresholds;
 }
 
 export interface RetrievalProjectRegressionInput {
@@ -798,8 +802,19 @@ export interface RetrievalProjectRegressionInput {
   policy: { id: string; description?: string };
   mustInclude: RetrievalRegressionItem[];
   forbidden: RetrievalRegressionItem[];
+  thresholds?: RetrievalQualityThresholds;
   maxResults?: number;
   types?: Array<'manuscript' | 'canon' | 'knowledge' | 'runs' | 'review' | 'feedback'>;
+}
+
+export interface RetrievalQualityThresholds {
+  requiredCoverage: number;
+  forbiddenLeakage: number;
+}
+
+export interface QualityThresholdConfig {
+  source: string;
+  retrieval: RetrievalQualityThresholds;
 }
 
 export interface RetrievalRegressionFailure {
@@ -1173,6 +1188,8 @@ export function createApiClient(
           )}/${encodeURIComponent(targetId)}/approval-references`
         )
       ),
+    getQualityThresholds: async () =>
+      adaptQualityThresholdConfig(await requestJson(fetchImpl, `${baseUrl}/retrieval/quality-thresholds`)),
     runProjectRetrievalRegression: async (projectId, input) =>
       adaptRetrievalRegressionResult(
         await requestJson(
@@ -1363,6 +1380,19 @@ function adaptRetrievalRegressionResult(value: unknown): RetrievalRegressionResu
     included: Array.isArray(value.included) ? value.included.filter(isRecord).map(adaptRetrievalRegressionItem) : [],
     excluded: Array.isArray(value.excluded) ? value.excluded.filter(isRecord).map(adaptRetrievalRegressionExcludedItem) : [],
     failures: Array.isArray(value.failures) ? value.failures.filter(isRecord).map(adaptRetrievalRegressionFailure) : []
+  };
+}
+
+function adaptQualityThresholdConfig(value: unknown): QualityThresholdConfig {
+  const source = isRecord(value) ? stringOrFallback(value.source, 'synthetic-local-defaults') : 'synthetic-local-defaults';
+  const retrieval = isRecord(value) && isRecord(value.retrieval) ? value.retrieval : {};
+
+  return {
+    source,
+    retrieval: {
+      requiredCoverage: numberOrFallback(retrieval.requiredCoverage, 1),
+      forbiddenLeakage: numberOrFallback(retrieval.forbiddenLeakage, 0)
+    }
   };
 }
 
@@ -2149,12 +2179,14 @@ function adaptProductObservabilitySummary(value: unknown): ProductObservabilityS
       averagePerRun: numberOrFallback(value.tokens.averagePerRun, 0)
     },
     quality: {
+      status: typeof quality.status === 'string' ? quality.status : undefined,
       acceptedRate: numberOrFallback(quality.acceptedRate, 0),
       openIssueCount: numberOrFallback(quality.openIssueCount, 0),
       highSeverityOpenCount: numberOrFallback(quality.highSeverityOpenCount, 0),
       outcomes: numberRecordOrEmpty(quality.outcomes)
     },
     adoption: {
+      status: typeof adoption.status === 'string' ? adoption.status : undefined,
       adoptedRate: numberOrFallback(adoption.adoptedRate, 0),
       partialRate: numberOrFallback(adoption.partialRate, 0),
       rejectedRate: numberOrFallback(adoption.rejectedRate, 0),

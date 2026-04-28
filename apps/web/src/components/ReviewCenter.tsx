@@ -24,15 +24,22 @@ export function ReviewCenter({ client, projectId }: ReviewCenterProps = {}) {
   const [taskTitle, setTaskTitle] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!client || !projectId) return;
+    if (!client || !projectId) {
+      setReports([]);
+      setLoadError(null);
+      setLoading(false);
+      return;
+    }
     const apiClient = client;
     const activeProjectId = projectId;
     let mounted = true;
 
     async function loadReports() {
       setLoadError(null);
+      setLoading(true);
       try {
         const loadedReports = await apiClient.listReviewReports(activeProjectId);
         if (!mounted) return;
@@ -44,6 +51,8 @@ export function ReviewCenter({ client, projectId }: ReviewCenterProps = {}) {
         }
       } catch (error) {
         if (mounted) setLoadError(error instanceof Error ? error.message : 'Unable to load review reports');
+      } finally {
+        if (mounted) setLoading(false);
       }
     }
 
@@ -55,10 +64,17 @@ export function ReviewCenter({ client, projectId }: ReviewCenterProps = {}) {
 
   const activeReport = reports[0];
   const activeFinding = activeReport?.findings[0];
-  const displayedFinding = activeFinding ?? demoFinding();
-  const suggestion = useMemo(() => suggestionFromFinding(displayedFinding), [displayedFinding]);
+  const demoMode = !client;
+  const displayedFinding = activeFinding ?? (demoMode ? demoFinding() : null);
+  const suggestion = useMemo(
+    () => (displayedFinding ? suggestionFromFinding(displayedFinding) : null),
+    [displayedFinding]
+  );
+  const qualityLabel = activeReport?.qualityScore.overall ?? (demoMode ? 76 : 'No data');
 
   async function decideRevision(action: ReviewFindingActionKind) {
+    if (!displayedFinding) return;
+
     const localStatus = action === 'ApplyRevision' ? 'Applied' : action === 'Rejected' ? 'Rejected' : findingStatus;
 
     if (client && projectId && activeFinding) {
@@ -86,9 +102,13 @@ export function ReviewCenter({ client, projectId }: ReviewCenterProps = {}) {
     <section className="surface-panel" aria-labelledby="review-center-title">
       <header className="panel-header">
         <h2 id="review-center-title">Review Center</h2>
-        <span>Quality {activeReport?.qualityScore.overall ?? 76}</span>
+        <span>Quality {qualityLabel}</span>
       </header>
       {loadError ? <p role="alert">{loadError}</p> : null}
+      {client && !projectId ? <p>No project available.</p> : null}
+      {loading ? <p>Loading review reports...</p> : null}
+      {client && projectId && !loading && !activeFinding && !loadError ? <p>No review findings yet.</p> : null}
+      {displayedFinding && suggestion ? (
       <article className="review-finding">
         <h3>{displayedFinding.category || 'Continuity'} finding</h3>
         <p>{displayedFinding.problem}</p>
@@ -131,6 +151,7 @@ export function ReviewCenter({ client, projectId }: ReviewCenterProps = {}) {
           </button>
         </div>
       </article>
+      ) : null}
     </section>
   );
 }

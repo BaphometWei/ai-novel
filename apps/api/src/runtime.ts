@@ -352,14 +352,23 @@ function createPersistentBackupDependencies(input: {
         if (!project) throw new Error('Project not found');
         const manuscript = await input.manuscripts.findByProjectId(projectId);
         const chapters = manuscript ? await input.manuscripts.listChapters(manuscript.id) : [];
+        const artifactIds = new Set(
+          chapters.flatMap((chapter) => chapter.versions.map((version) => version.bodyArtifactId))
+        );
+        const allArtifacts = await input.artifacts.list({ limit: 1000 });
+        const artifacts = allArtifacts.filter((artifact) => artifactIds.has(artifact.id));
+        const runIds = new Set(
+          artifacts.flatMap((artifact) => (artifact.relatedRunId ? [artifact.relatedRunId] : []))
+        );
+        const runs = (await input.agentRuns.list({ limit: 1000 })).filter((run) => runIds.has(run.id));
         return {
           project,
           manuscripts: manuscript ? [{ ...manuscript, chapters }] : [],
-          artifacts: await input.artifacts.list({ limit: 1000 }),
+          artifacts,
           canon: [],
           knowledge: [],
           sourcePolicies: [],
-          runs: await input.agentRuns.list({ limit: 1000 }),
+          runs,
           settings: {
             provider: await input.settings.findProviderSettings('openai'),
             budget: await input.settings.findBudgetPolicy('openai')
