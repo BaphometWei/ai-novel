@@ -103,6 +103,30 @@ export interface WritingRunResult {
   contextPack: AgentRoomContextPack;
 }
 
+export interface PreparedWritingRun {
+  id: string;
+  projectId: string;
+  agentRunId: string;
+  status: 'Prepared' | 'Cancelled';
+  confirmationRequired: boolean;
+  provider: {
+    provider: string;
+    model: string;
+    isExternal: boolean;
+    secretConfigured: boolean;
+  };
+  budgetEstimate: {
+    inputTokens: number;
+    outputTokens: number;
+    estimatedCostUsd: number;
+    maxRunCostUsd?: number;
+  };
+  warnings: string[];
+  blockingReasons: string[];
+  expiresAt: string;
+  contextPack: AgentRoomContextPack;
+}
+
 export interface AcceptDraftInput {
   runId: string;
   draftArtifactId: string;
@@ -549,6 +573,17 @@ export interface WritingManuscriptApiClient {
   addChapterVersion(chapterId: string, input: AddChapterVersionInput): Promise<ChapterVersionSummary>;
   acceptDraft(chapterId: string, input: AcceptDraftInput): Promise<AcceptDraftResult>;
   startWritingRun(projectId: string, input: WritingRunInput): Promise<WritingRunResult>;
+  prepareWritingRun(projectId: string, input: WritingRunInput): Promise<PreparedWritingRun>;
+  executePreparedWritingRun(
+    projectId: string,
+    preparedRunId: string,
+    input: { confirmed: boolean; confirmedBy?: string }
+  ): Promise<WritingRunResult>;
+  cancelPreparedWritingRun(
+    projectId: string,
+    preparedRunId: string,
+    input?: { cancelledBy?: string }
+  ): Promise<PreparedWritingRun>;
 }
 
 export type GlobalSearchResultType = 'manuscript' | 'canon' | 'knowledge' | 'runs' | 'review' | 'feedback';
@@ -1054,6 +1089,26 @@ export function createApiClient(
     startWritingRun: async (projectId, input) =>
       adaptWritingRunResult(
         await requestJson(fetchImpl, `${baseUrl}/projects/${projectId}/writing-runs`, jsonRequest('POST', input))
+      ),
+    prepareWritingRun: async (projectId, input) =>
+      adaptPreparedWritingRun(
+        await requestJson(fetchImpl, `${baseUrl}/projects/${projectId}/writing-runs/prepare`, jsonRequest('POST', input))
+      ),
+    executePreparedWritingRun: async (projectId, preparedRunId, input) =>
+      adaptWritingRunResult(
+        await requestJson(
+          fetchImpl,
+          `${baseUrl}/projects/${projectId}/writing-runs/${preparedRunId}/execute`,
+          jsonRequest('POST', input)
+        )
+      ),
+    cancelPreparedWritingRun: async (projectId, preparedRunId, input = {}) =>
+      adaptPreparedWritingRun(
+        await requestJson(
+          fetchImpl,
+          `${baseUrl}/projects/${projectId}/writing-runs/${preparedRunId}/cancel`,
+          jsonRequest('POST', input)
+        )
       ),
     loadSettingsDefaults: async (provider = 'openai') => ({
       provider: adaptProviderDefaults(await requestJson(fetchImpl, `${baseUrl}/settings/providers/${provider}`)),
@@ -1942,6 +1997,50 @@ function adaptWritingRunResult(value: unknown): WritingRunResult {
         findings: stringArrayOrEmpty(selfCheckResult.findings)
       }
     },
+    contextPack: isRecord(value.contextPack)
+      ? adaptAgentRoomContextPack(value.contextPack)
+      : {
+          id: '',
+          taskGoal: '',
+          agentRole: '',
+          riskLevel: '',
+          sections: [],
+          citations: [],
+          exclusions: [],
+          warnings: [],
+          retrievalTrace: [],
+          createdAt: ''
+        }
+  };
+}
+
+function adaptPreparedWritingRun(value: unknown): PreparedWritingRun {
+  if (!isRecord(value) || !isRecord(value.provider) || !isRecord(value.budgetEstimate)) {
+    throw new Error('Invalid prepared writing run response');
+  }
+
+  return {
+    id: stringOrFallback(value.id, ''),
+    projectId: stringOrFallback(value.projectId, ''),
+    agentRunId: stringOrFallback(value.agentRunId, ''),
+    status: value.status === 'Cancelled' ? 'Cancelled' : 'Prepared',
+    confirmationRequired: value.confirmationRequired !== false,
+    provider: {
+      provider: stringOrFallback(value.provider.provider, ''),
+      model: stringOrFallback(value.provider.model, ''),
+      isExternal: value.provider.isExternal === true,
+      secretConfigured: value.provider.secretConfigured === true
+    },
+    budgetEstimate: {
+      inputTokens: numberOrFallback(value.budgetEstimate.inputTokens, 0),
+      outputTokens: numberOrFallback(value.budgetEstimate.outputTokens, 0),
+      estimatedCostUsd: numberOrFallback(value.budgetEstimate.estimatedCostUsd, 0),
+      maxRunCostUsd:
+        typeof value.budgetEstimate.maxRunCostUsd === 'number' ? value.budgetEstimate.maxRunCostUsd : undefined
+    },
+    warnings: stringArrayOrEmpty(value.warnings),
+    blockingReasons: stringArrayOrEmpty(value.blockingReasons),
+    expiresAt: stringOrFallback(value.expiresAt, ''),
     contextPack: isRecord(value.contextPack)
       ? adaptAgentRoomContextPack(value.contextPack)
       : {

@@ -61,4 +61,4 @@ The current deterministic/local verification path is intended to be safe for loc
 - 2026-04-28: `git push origin main` repeatedly failed after local commits with `Connection closed by 198.18.0.x port 443`.
 - `git ls-remote origin HEAD` later succeeded and reported remote HEAD at `4c4891138fce42f0850d6b06d1e52c74cec3130a`, so read access is available.
 - Local fallback at the time: continue repository-local implementation with commits on `main`; retry normal non-force push during final handoff.
-- Later sync closed this transport note: on 2026-04-28, `codex/local-hardening-completion`, `main`, `origin/main`, and `origin/HEAD` were observed at `1727d5f feat: complete agent system production hardening`.
+- Later sync closed this transport note: on 2026-04-28, `main`, `origin/main`, and `origin/HEAD` were observed at `2a01233 feat: close remaining local gap follow-ups`.

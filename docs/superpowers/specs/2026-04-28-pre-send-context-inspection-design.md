@@ -4,7 +4,7 @@ Date: 2026-04-28
 
 ## Purpose
 
-Let authors inspect the exact context, warnings, and estimated provider spend before any external model call leaves the local workspace. This spike documents the intended route split and validation work only. Full implementation is deferred until the writing route split, orchestration route split, and confirmation UX have been validated together.
+Let authors inspect the exact context, warnings, and estimated provider spend before any external model call leaves the local workspace. This spike documents the intended route split and validation work. As of the local remaining-gap completion batch, the writing route split and manuscript editor confirmation UX are implemented locally; orchestration prepare/execute remains deferred until its route split is validated separately.
 
 The design applies to external providers only. Fake and local providers should remain single-step by default so deterministic automation, local rehearsals, and no-secret test paths do not gain unnecessary confirmation state. A caller may explicitly request the two-phase path for fake/local providers when testing the confirmation UX, but that should be opt-in.
 
@@ -96,4 +96,4 @@ Projects marked with external model use disabled must fail closed:
 
 ## Deferred Scope
 
-Do not implement the full feature until the route split and UX behavior are validated. This spike intentionally defers database migrations, route handlers, frontend state changes, provider adapter changes, and acceptance tests beyond the validation plan above.
+The writing-route slice is implemented locally with `prepare`, `execute`, and `cancel` subroutes plus manuscript editor confirmation state. Orchestration prepare/execute, indexed pending-send cleanup, and provider-specific production validation remain deferred. The first local implementation stores prepared writing sends in durable job payloads to avoid a migration; a future production hardening pass should add indexed pending-send storage and retention policy if this flow becomes high volume.

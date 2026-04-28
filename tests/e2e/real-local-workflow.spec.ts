@@ -22,7 +22,23 @@ test('real local API workflow creates a chapter, generates a deterministic draft
   const chapterId = createdChapter.chapter.id as string;
   await expect(page.getByRole('treeitem', { name: /New working chapter/i })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Generate draft' }).click();
+  const prepareResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes('/writing-runs/prepare') && response.request().method() === 'POST'
+  );
+  await page.getByRole('button', { name: 'Inspect before send' }).click();
+  const prepareResponse = await prepareResponsePromise;
+  expect(prepareResponse.status(), await prepareResponse.text()).toBe(201);
+  const prepared = await prepareResponse.json();
+  await expect(page.getByLabel('Pre-send inspection')).toContainText(prepared.contextPack.id);
+  await expect(page.getByLabel('Pre-send inspection')).toContainText('fake');
+
+  const executeResponsePromise = page.waitForResponse(
+    (response) => response.url().includes('/execute') && response.request().method() === 'POST'
+  );
+  await page.getByRole('button', { name: 'Confirm send' }).click();
+  const executeResponse = await executeResponsePromise;
+  expect(executeResponse.status(), await executeResponse.text()).toBe(201);
   const draftEditor = page.getByRole('textbox', { name: 'Scene draft editor' });
   await expect(draftEditor).toContainText('Deterministic writing draft');
 

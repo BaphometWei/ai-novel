@@ -22,57 +22,6 @@ test('workspace dashboard loads', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Observability' })).toBeVisible();
 });
 
-test('workspace shows global search and approval queue from API contract', async ({ page }) => {
-  await page.route('**/api/approvals', async (route) => {
-    await route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({
-        items: [
-          {
-            id: 'approval_e2e_queue',
-            projectId: 'project_e2e',
-            kind: 'approval',
-            targetType: 'canon_fact',
-            targetId: 'fact_lantern',
-            title: 'Approve lantern canon?',
-            riskLevel: 'High',
-            reason: 'Canon conflict',
-            proposedAction: 'Accept canon fact',
-            status: 'Pending',
-            createdAt: '2026-04-27T08:00:00.000Z'
-          }
-        ]
-      })
-    });
-  });
-  await page.route('**/api/search', async (route) => {
-    expect(route.request().method()).toBe('POST');
-    await route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({
-        results: [
-          {
-            id: 'search_e2e_lantern',
-            projectId: 'project_e2e',
-            type: 'canon',
-            title: 'Lantern Key',
-            snippet: 'The key was hidden in the lantern.',
-            score: 0.9
-          }
-        ]
-      })
-    });
-  });
-
-  await page.goto('/');
-
-  await expect(page.getByLabel('Approvals queue')).toContainText('Approve lantern canon?');
-  await page.getByLabel('Global search input').fill('lantern');
-  await page.getByLabel('Global search input').press('Enter');
-  await expect(page.getByLabel('Global search results')).toContainText('Lantern Key');
-  await expect(page.getByLabel('Global search results')).toContainText('hidden in the lantern');
-});
-
 test('workspace has no horizontal overflow on desktop and mobile', async ({ browser }) => {
   for (const viewport of [
     { width: 1440, height: 1000 },
@@ -89,21 +38,6 @@ test('workspace has no horizontal overflow on desktop and mobile', async ({ brow
     expect(overflow).toBeLessThanOrEqual(1);
     await page.close();
   }
-});
-
-test('settings panel loads defaults and saves provider settings through the API', async ({ page }) => {
-  await page.goto('/');
-
-  await expect(page.getByRole('heading', { name: 'Provider Defaults' })).toBeVisible();
-  await expect(page.getByLabel('Default model')).toHaveValue(/.+/);
-
-  await page.getByLabel('Default model').fill('gpt-e2e-settings');
-  await page.getByLabel('Provider API key').fill('sk-e2e-secret');
-  await page.getByRole('button', { name: 'Save provider defaults' }).click();
-
-  await expect(page.getByText('Provider defaults saved.')).toBeVisible();
-  await expect(page.getByText('env:OPENAI_API_KEY')).toBeVisible();
-  await expect(page.getByText('sk-e2e-secret')).toHaveCount(0);
 });
 
 test('settings panel saves model routing budget and source policy defaults through the API', async ({ page }) => {
@@ -258,83 +192,6 @@ test('agent room exposes run inspection signals and actions', async ({ page }) =
   expect(actionRequest).toEqual({ method: 'POST', postData: {} });
 });
 
-test('version history shows mocked snapshots and creates a traceable restore point', async ({ page }) => {
-  const createdSnapshot = {
-    id: 'snapshot_e2e_created',
-    projectId: 'project_1',
-    createdAt: '2026-04-27T09:15:00.000Z',
-    history: {
-      entities: [
-        { id: 'chapter_1', type: 'manuscript', version: 3, label: 'Chapter 1 v3' },
-        { id: 'canon_1', type: 'canon', version: 1, label: 'Canon Fact v1' }
-      ],
-      trace: {
-        links: [{ from: 'canon_1', to: 'chapter_1', relation: 'grounds' }],
-        createdAt: '2026-04-27T09:15:00.000Z'
-      },
-      restorePoints: [{ entityId: 'chapter_1', version: 3 }]
-    }
-  };
-
-  let createSnapshotRequest: unknown;
-
-  await page.route('**/api/version-history/project_1', async (route) => {
-    await route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({
-        snapshots: [
-          {
-            id: 'snapshot_e2e_existing',
-            projectId: 'project_1',
-            createdAt: '2026-04-27T08:00:00.000Z',
-            history: {
-              entities: [
-                { id: 'chapter_8', type: 'manuscript', version: 2, label: 'Chapter 8 v2' },
-                { id: 'run_8', type: 'run', version: 1, label: 'Draft run' }
-              ],
-              trace: {
-                links: [{ from: 'run_8', to: 'chapter_8', relation: 'generated' }],
-                createdAt: '2026-04-27T08:00:00.000Z'
-              },
-              restorePoints: [{ entityId: 'chapter_8', version: 2 }]
-            }
-          }
-        ]
-      })
-    });
-  });
-  await page.route('**/api/version-history/project_1/snapshots', async (route) => {
-    expect(route.request().method()).toBe('POST');
-    createSnapshotRequest = await route.request().postDataJSON();
-    await route.fulfill({
-      status: 201,
-      contentType: 'application/json',
-      body: JSON.stringify(createdSnapshot)
-    });
-  });
-
-  await page.goto('/');
-
-  await expect(page.getByRole('heading', { name: 'Version History' })).toBeVisible();
-  await expect(page.getByLabel('Version history snapshots')).toContainText('snapshot_e2e_existing');
-  await expect(page.getByLabel('Version history detail')).toContainText('run_8 -> chapter_8: generated');
-  await expect(page.getByLabel('Version history detail')).toContainText('chapter_8 v2');
-
-  await page.getByRole('button', { name: 'Create snapshot' }).click();
-
-  await expect(page.getByText('Snapshot created.')).toBeVisible();
-  await expect(page.getByLabel('Version history snapshots')).toContainText('snapshot_e2e_created');
-  await expect(page.getByLabel('Version history detail')).toContainText('canon_1 -> chapter_1: grounds');
-  await expect(page.getByLabel('Version history detail')).toContainText('chapter_1 v3');
-  expect(createSnapshotRequest).toMatchObject({
-    entities: [
-      { id: 'chapter_1', type: 'manuscript', version: 3, label: 'Chapter 1 v3' },
-      { id: 'canon_1', type: 'canon', version: 1, label: 'Canon Fact v1' }
-    ],
-    links: [{ from: 'canon_1', to: 'chapter_1', relation: 'grounds' }]
-  });
-});
-
 test('observability dashboard exposes cost token latency and adoption signals', async ({ page }) => {
   await page.route('**/api/projects/project_1/observability/summary', fulfillObservabilitySummary);
   await page.route('**/api/observability/summary', fulfillObservabilitySummary);
@@ -381,110 +238,6 @@ test('retrieval evaluation shows pass and fail regression evidence', async ({ pa
   await expect(failing).toContainText('source_restricted_7');
 });
 
-test('narrative intelligence shows reader promise readiness and closure blockers', async ({ page }) => {
-  await page.route('**/api/narrative-intelligence/projects/project_1/summary?currentChapter=7', async (route) => {
-    expect(route.request().method()).toBe('GET');
-    await fulfillJson(route, narrativeSummaryResult);
-  });
-
-  await page.goto('/');
-
-  await expect(page.getByRole('heading', { name: 'Narrative Intelligence' })).toBeVisible();
-  const readiness = page.getByLabel('Reader promise readiness');
-  await expect(readiness).toContainText('ReadyForPayoff');
-  await expect(readiness).toContainText('Pay off in this scene');
-  await expect(readiness).toContainText('Promise can land now');
-
-  const blockers = page.getByLabel('Closure blockers');
-  await expect(blockers).toContainText('2 blockers');
-  await expect(blockers).toContainText('The locked door');
-  await expect(blockers).toContainText('Mira arc');
-});
-
-test('governance audit shows allowed and blocked transition evidence', async ({ page }) => {
-  await page.route('**/api/governance/authorship-audit/inspect', async (route) => {
-    expect(route.request().method()).toBe('POST');
-    const body = await route.request().postDataJSON();
-    await fulfillJson(route, body.action === 'overwrite_manuscript_version' ? authorshipBlockedResult : authorshipAllowedResult);
-  });
-
-  await page.goto('/');
-
-  await expect(page.getByRole('heading', { name: 'Governance Audit' })).toBeVisible();
-  const allowed = page.getByLabel('Allowed authorship transition');
-  await expect(allowed).toContainText('Allowed');
-  await expect(allowed).toContainText('accept_manuscript_version');
-  await expect(allowed).toContainText('Approval required');
-
-  const blocked = page.getByLabel('Blocked authorship transition');
-  await expect(blocked).toContainText('Blocked');
-  await expect(blocked).toContainText('overwrite_manuscript_version');
-  await expect(blocked).toContainText('Missing human approval');
-});
-
-test('scheduled backups shows policies due intents and run success', async ({ page }) => {
-  await page.route('**/api/scheduled-backups/policies', async (route) => {
-    await fulfillJson(route, [scheduledBackupPolicy]);
-  });
-  await page.route('**/api/scheduled-backups/due**', async (route) => {
-    await fulfillJson(route, scheduledBackupDueResult);
-  });
-  await page.route('**/api/scheduled-backups/policies/policy_daily/runs', async (route) => {
-    expect(route.request().method()).toBe('POST');
-    await fulfillJson(route, scheduledBackupUpdatedPolicy);
-  });
-
-  await page.goto('/');
-
-  await expect(page.getByRole('heading', { name: 'Scheduled Backups' })).toBeVisible();
-  const policies = page.getByLabel('Scheduled backup policies');
-  await expect(policies).toContainText('policy_daily');
-  await expect(policies).toContainText('daily');
-  await expect(policies).toContainText('Succeeded');
-
-  const due = page.getByLabel('Due backup intents');
-  await expect(due).toContainText('backup:project_demo:policy_daily');
-  await expect(due).toContainText('memory://backups');
-  await due.getByRole('button', { name: 'Mark success' }).click();
-
-  await expect(page.getByLabel('Scheduled backup run result')).toContainText('Run Succeeded');
-  await expect(page.getByLabel('Scheduled backup run result')).toContainText('2026-04-28T12:00:00.000Z');
-});
-
-test('branch and retcon panel shows projection adoption and failed regression evidence', async ({ page }) => {
-  await page.route('**/api/branch-retcon/branches/project', async (route) => {
-    expect(route.request().method()).toBe('POST');
-    await fulfillJson(route, branchProjectResult);
-  });
-  await page.route('**/api/branch-retcon/branches/adopt', async (route) => {
-    expect(route.request().method()).toBe('POST');
-    await fulfillJson(route, branchAdoptResult);
-  });
-  await page.route('**/api/branch-retcon/retcons/propose', async (route) => {
-    expect(route.request().method()).toBe('POST');
-    await fulfillJson(route, retconProposalResult);
-  });
-  await page.route('**/api/branch-retcon/retcons/regression-checks/run', async (route) => {
-    expect(route.request().method()).toBe('POST');
-    await fulfillJson(route, retconRegressionResult);
-  });
-
-  await page.goto('/');
-
-  await expect(page.getByRole('heading', { name: 'Branch & Retcon' })).toBeVisible();
-  const projection = page.getByLabel('Branch scenario projection');
-  await expect(projection).toContainText('Moonlit Archive Branch');
-  await expect(projection).toContainText('canon_archive');
-  await expect(projection).toContainText('artifact_branch_scene');
-  await expect(projection).toContainText('adopted: canon_archive, canon_hidden_key');
-
-  const retcon = page.getByLabel('Retcon proposal');
-  await expect(retcon).toContainText('Change locked door origin');
-  await expect(retcon).toContainText('Failed');
-  await expect(retcon).toContainText('timeline');
-  await expect(retcon).toContainText('timeline_event_2');
-});
-
 test('review learning shows recurring issues and revision recheck evidence', async ({ page }) => {
   await page.route('**/api/review-learning/recurring-issues', async (route) => {
     expect(route.request().method()).toBe('POST');
@@ -512,42 +265,6 @@ test('review learning shows recurring issues and revision recheck evidence', asy
   await expect(lifecycle).toContainText('Resolved');
   await expect(lifecycle).toContainText('review_finding_open -> review_finding_current');
   await expect(lifecycle).toContainText('StillOpen');
-});
-
-test('import export panel imports and exports a project bundle when the UI exposes the actions', async ({ page }) => {
-  await page.route('**/api/exports/bundles', async (route) => {
-    expect(route.request().method()).toBe('POST');
-    await fulfillJson(route, exportBundleResult, 202);
-  });
-  await page.route('**/api/imports/jobs', async (route) => {
-    expect(route.request().method()).toBe('POST');
-    expect(await route.request().postDataJSON()).toMatchObject({
-      projectId: 'project_1',
-      sourceUri: 'memory://project_1/export.zip',
-      mode: 'replace'
-    });
-    await fulfillJson(route, importJobResult, 202);
-  });
-
-  await page.goto('/');
-
-  await expect(page.getByRole('heading', { name: 'Portable Bundle Desk' })).toBeVisible();
-  await page.getByLabel('Project id', { exact: true }).fill('project_1');
-  await page.getByRole('button', { name: 'Export bundle' }).click();
-
-  const result = page.getByLabel('Export bundle result');
-  await expect(result).toContainText('export_job_1');
-  await expect(result).toContainText('memory://project_1/export.zip');
-
-  await page.getByLabel('Import source URI').fill('memory://project_1/export.zip');
-  await page.getByLabel('Import mode').selectOption('replace');
-  await page.getByRole('button', { name: 'Import bundle' }).click();
-
-  const importResult = page.getByLabel('Import job result');
-  await expect(importResult).toContainText('import_job_1');
-  await expect(importResult).toContainText('Queued');
-  await expect(importResult).toContainText('memory://project_1/export.zip');
-  await expect(importResult).toContainText('replace');
 });
 
 const agentRoomRun = {
@@ -620,7 +337,6 @@ const agentRoomRun = {
     calls: []
   }
 };
-
 async function fulfillJson(route: Route, body: unknown, status = 200) {
   await route.fulfill({
     status,
@@ -939,35 +655,3 @@ const importJobResult = {
     payload: { sourceUri: 'memory://project_1/export.zip', mode: 'replace' }
   }
 };
-
-test('backup panel creates, verifies, and restores a portable bundle', async ({ page, request }) => {
-  const projectResponse = await request.post('http://127.0.0.1:4000/projects', {
-    data: {
-      title: 'Backup E2E Project',
-      language: 'en-US',
-      targetAudience: 'serial fiction readers'
-    }
-  });
-  expect(projectResponse.status()).toBe(201);
-  const project = await projectResponse.json();
-  const restoredProjectId = `project_e2e_restored_${Date.now()}`;
-
-  await page.goto('/');
-
-  await expect(page.getByRole('heading', { name: 'Portable Bundle Desk' })).toBeVisible();
-  await page.getByLabel('Project id', { exact: true }).fill(project.id);
-  await page.getByLabel('Reason').fill('e2e verification');
-  await page.getByLabel('Requested by').fill('playwright');
-  await page.getByRole('button', { name: 'Create backup' }).click();
-
-  await expect(page.getByLabel('Backup create result')).toContainText('created');
-  await expect(page.getByLabel('Backup create result')).toContainText(/backups[\\/]/);
-
-  await page.getByRole('button', { name: 'Verify backup' }).click();
-  await expect(page.getByLabel('Backup verify result')).toContainText('verified');
-
-  await page.getByLabel('Target project id', { exact: true }).fill(restoredProjectId);
-  await page.getByRole('button', { name: 'Restore backup' }).click();
-  await expect(page.getByLabel('Backup restore result')).toContainText('restored');
-  await expect(page.getByLabel('Backup restore result')).toContainText(restoredProjectId);
-});

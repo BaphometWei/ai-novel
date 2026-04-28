@@ -99,7 +99,7 @@ export async function runWritingWorkflow(
 
   const draft = await dependencies.provider.generateText({
     model: dependencies.model,
-    prompt: buildDraftPrompt(input, contextPack)
+    prompt: buildWritingDraftPrompt(input, contextPack)
   });
   const selfCheck = await dependencies.provider.generateStructured<SelfCheckArtifact['result']>({
     model: dependencies.model,
@@ -145,7 +145,7 @@ function assertWritingContract(contract: WritingContract): void {
   }
 }
 
-function buildDraftPrompt(input: WritingWorkflowInput, contextPack: ContextPack): string {
+export function buildWritingDraftPrompt(input: WritingWorkflowInput, contextPack: ContextPack): string {
   return [
     'Role: Writer',
     `Project: ${input.projectId}`,

@@ -25,7 +25,7 @@ export type {
   RestoreRecord as BackupWorkflowRestoreRecord,
   VerifyBackupInput
 } from './backup-workflow';
-export { runWritingWorkflow } from './writing-workflow';
+export { buildWritingDraftPrompt, runWritingWorkflow } from './writing-workflow';
 export type {
   DraftProseArtifact,
   SelfCheckArtifact,

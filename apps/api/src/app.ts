@@ -281,6 +281,15 @@ function createUnavailableWritingRunDependencies(): WritingRunRouteDependencies 
   return {
     async start() {
       throw new Error('Writing run dependencies are not configured');
+    },
+    async prepare() {
+      throw new Error('Writing run dependencies are not configured');
+    },
+    async executePrepared() {
+      throw new Error('Writing run dependencies are not configured');
+    },
+    async cancelPrepared() {
+      throw new Error('Writing run dependencies are not configured');
     }
   };
 }

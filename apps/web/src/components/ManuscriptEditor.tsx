@@ -3,7 +3,9 @@ import {
   type ApiClient,
   type ChapterSummary,
   type CreateProjectChapterResult,
+  type PreparedWritingRun,
   type WritingManuscriptApiClient,
+  type WritingRunInput,
   type WritingRunResult
 } from '../api/client';
 
@@ -25,6 +27,7 @@ export function ManuscriptEditor({ client, projectId: selectedProjectId }: Manus
   const [chapters, setChapters] = useState<ChapterSummary[]>(client ? [] : demoChapters);
   const [selectedChapterId, setSelectedChapterId] = useState(client ? '' : 'chapter_12');
   const [run, setRun] = useState<WritingRunResult | null>(null);
+  const [preparedRun, setPreparedRun] = useState<PreparedWritingRun | null>(null);
   const [status, setStatus] = useState(client ? 'Loading chapters...' : 'Drafting');
   const [acceptedVersionId, setAcceptedVersionId] = useState('');
   const [approvalReasons, setApprovalReasons] = useState<string[]>([]);
@@ -111,6 +114,7 @@ export function ManuscriptEditor({ client, projectId: selectedProjectId }: Manus
       setChapters((current) => [...current, result.chapter]);
       setSelectedChapterId(result.chapter.id);
       setRun(null);
+      setPreparedRun(null);
       setDraftText('New chapter draft.');
       setAcceptedVersionId('');
       setApprovalReasons([]);
@@ -127,34 +131,65 @@ export function ManuscriptEditor({ client, projectId: selectedProjectId }: Manus
     setError(null);
     setAcceptedVersionId('');
     setApprovalReasons([]);
-    const manuscriptId = selectedChapter.manuscriptId ?? 'manuscript_default';
     try {
-      const result = await client.startWritingRun(projectId, {
-        target: {
-          manuscriptId,
-          chapterId: selectedChapter.id,
-          range: selectedChapter.title
-        },
-        contract: {
-          authorshipLevel: 'A3',
-          goal: `Draft ${selectedChapter.title}`,
-          mustWrite: `Draft the selected chapter: ${selectedChapter.title}.`,
-          wordRange: { min: 300, max: 900 },
-          forbiddenChanges: ['Do not change canon without review'],
-          acceptanceCriteria: ['Ready for author acceptance']
-        },
-        retrieval: {
-          query: selectedChapter.title,
-          maxContextItems: 4,
-          maxSectionChars: 1200
-        }
-      });
+      setPreparedRun(null);
+      const result = await client.startWritingRun(projectId, writingRunInputFor(selectedChapter));
       setRun(result);
       setDraftText(result.draftArtifact.text);
       setStatus(result.status);
     } catch (caught) {
       setError(errorMessage(caught, 'Unable to generate draft.'));
       setStatus('Ready');
+    }
+  }
+
+  async function inspectBeforeSend() {
+    if (!client || !projectId || !selectedChapter) return;
+    setStatus('Preparing send...');
+    setError(null);
+    setAcceptedVersionId('');
+    setApprovalReasons([]);
+    try {
+      const prepared = await client.prepareWritingRun(projectId, writingRunInputFor(selectedChapter));
+      setPreparedRun(prepared);
+      setRun(null);
+      setStatus(prepared.status);
+    } catch (caught) {
+      setError(errorMessage(caught, 'Unable to prepare writing run.'));
+      setStatus('Ready');
+    }
+  }
+
+  async function confirmPreparedSend() {
+    if (!client || !projectId || !preparedRun) return;
+    setStatus('Executing prepared send...');
+    setError(null);
+    try {
+      const result = await client.executePreparedWritingRun(projectId, preparedRun.id, {
+        confirmed: true,
+        confirmedBy: 'operator'
+      });
+      setRun(result);
+      setPreparedRun(null);
+      setDraftText(result.draftArtifact.text);
+      setStatus(result.status);
+    } catch (caught) {
+      setError(errorMessage(caught, 'Unable to execute prepared send.'));
+      setStatus(preparedRun.status);
+    }
+  }
+
+  async function cancelPreparedSend() {
+    if (!client || !projectId || !preparedRun) return;
+    setStatus('Cancelling prepared send...');
+    setError(null);
+    try {
+      await client.cancelPreparedWritingRun(projectId, preparedRun.id, { cancelledBy: 'operator' });
+      setPreparedRun(null);
+      setStatus('Prepared send cancelled.');
+    } catch (caught) {
+      setError(errorMessage(caught, 'Unable to cancel prepared send.'));
+      setStatus(preparedRun.status);
     }
   }
 
@@ -205,6 +240,7 @@ export function ManuscriptEditor({ client, projectId: selectedProjectId }: Manus
               onClick={() => {
                 setSelectedChapterId(chapter.id);
                 setRun(null);
+                setPreparedRun(null);
                 setDraftText(demoDraft);
                 setAcceptedVersionId('');
                 setApprovalReasons([]);
@@ -223,6 +259,19 @@ export function ManuscriptEditor({ client, projectId: selectedProjectId }: Manus
             <div>
               <button type="button" onClick={() => void generateDraft()} disabled={!canUseApi}>
                 Generate draft
+              </button>
+              <button type="button" onClick={() => void inspectBeforeSend()} disabled={!canUseApi}>
+                Inspect before send
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmPreparedSend()}
+                disabled={!preparedRun || preparedRun.blockingReasons.length > 0}
+              >
+                Confirm send
+              </button>
+              <button type="button" onClick={() => void cancelPreparedSend()} disabled={!preparedRun}>
+                Cancel prepared send
               </button>
               <button type="button" onClick={() => void acceptDraft()} disabled={!run}>
                 Accept draft into manuscript
@@ -245,6 +294,66 @@ export function ManuscriptEditor({ client, projectId: selectedProjectId }: Manus
           {approvalReasons.map((reason) => (
             <p key={reason}>{reason}</p>
           ))}
+          {preparedRun ? (
+            <section aria-label="Pre-send inspection" className="context-inspector">
+              <h3>Pre-send inspection</h3>
+              <dl className="compact-list">
+                <div>
+                  <dt>Provider</dt>
+                  <dd>
+                    {preparedRun.provider.provider} / {preparedRun.provider.model}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Context pack</dt>
+                  <dd>{preparedRun.contextPack.id}</dd>
+                </div>
+                <div>
+                  <dt>Budget estimate</dt>
+                  <dd>
+                    {preparedRun.budgetEstimate.inputTokens} input / {preparedRun.budgetEstimate.outputTokens} output / $
+                    {preparedRun.budgetEstimate.estimatedCostUsd.toFixed(4)}
+                  </dd>
+                </div>
+                {preparedRun.contextPack.sections.map((section) => (
+                  <div key={section.name}>
+                    <dt>{section.name}</dt>
+                    <dd>{section.content}</dd>
+                  </div>
+                ))}
+                {preparedRun.contextPack.citations.map((citation) => (
+                  <div key={`${citation.sourceId}-${citation.quote ?? ''}`}>
+                    <dt>Evidence</dt>
+                    <dd>{citation.quote ?? citation.sourceId}</dd>
+                  </div>
+                ))}
+                {preparedRun.contextPack.exclusions.map((exclusion) => (
+                  <div key={exclusion}>
+                    <dt>Excluded</dt>
+                    <dd>{exclusion}</dd>
+                  </div>
+                ))}
+                {[...preparedRun.warnings, ...preparedRun.contextPack.warnings].map((warning) => (
+                  <div key={warning}>
+                    <dt>Warning</dt>
+                    <dd>{warning}</dd>
+                  </div>
+                ))}
+                {preparedRun.blockingReasons.map((reason) => (
+                  <div key={reason}>
+                    <dt>Blocked</dt>
+                    <dd>{reason}</dd>
+                  </div>
+                ))}
+                {preparedRun.contextPack.retrievalTrace.map((trace) => (
+                  <div key={trace}>
+                    <dt>Retrieval</dt>
+                    <dd>{trace}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ) : null}
           <dl className="compact-list context-inspector">
             <div>
               <dt>Context inspector</dt>
@@ -275,6 +384,29 @@ export function ManuscriptEditor({ client, projectId: selectedProjectId }: Manus
       </div>
     </section>
   );
+}
+
+function writingRunInputFor(chapter: ChapterSummary): WritingRunInput {
+  return {
+    target: {
+      manuscriptId: chapter.manuscriptId ?? 'manuscript_default',
+      chapterId: chapter.id,
+      range: chapter.title
+    },
+    contract: {
+      authorshipLevel: 'A3',
+      goal: `Draft ${chapter.title}`,
+      mustWrite: `Draft the selected chapter: ${chapter.title}.`,
+      wordRange: { min: 300, max: 900 },
+      forbiddenChanges: ['Do not change canon without review'],
+      acceptanceCriteria: ['Ready for author acceptance']
+    },
+    retrieval: {
+      query: chapter.title,
+      maxContextItems: 4,
+      maxSectionChars: 1200
+    }
+  };
 }
 
 function chapterStatus(chapter: ChapterSummary & { status?: string }) {

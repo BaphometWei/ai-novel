@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ApiClient, PreparedWritingRun, WritingManuscriptApiClient, WritingRunResult } from '../api/client';
 import { ManuscriptEditor } from '../components/ManuscriptEditor';
 import { StoryBible } from '../components/StoryBible';
 
@@ -10,8 +11,7 @@ afterEach(() => {
 
 describe('writing workbench', () => {
   it('runs a writing draft for a selected API chapter and accepts it into the manuscript', async () => {
-    const client = {
-      listProjects: vi.fn(async () => [{ id: 'project_api', title: 'API Project' }]),
+    const client = createWritingClient({
       listProjectChapters: vi.fn(async () => [
         {
           id: 'chapter_api_1',
@@ -28,8 +28,6 @@ describe('writing workbench', () => {
           versions: []
         }
       ]),
-      getChapterCurrentBody: vi.fn(async () => null),
-      createProjectChapter: vi.fn(),
       startWritingRun: vi.fn(async () => ({
         id: 'agent_run_1',
         status: 'AwaitingAcceptance',
@@ -98,7 +96,7 @@ describe('writing workbench', () => {
         ],
         candidates: []
       }))
-    };
+    });
 
     render(<ManuscriptEditor client={client} />);
 
@@ -178,6 +176,45 @@ describe('writing workbench', () => {
     expect(client.getChapterCurrentBody).toHaveBeenCalledWith('chapter_api_1');
   });
 
+  it('prepares an inspectable send before executing a writing run', async () => {
+    const client = createWritingClient({
+      prepareWritingRun: vi.fn(async () => preparedWritingRunResult()),
+      executePreparedWritingRun: vi.fn(async () => writingRunResult()),
+      cancelPreparedWritingRun: vi.fn(async () => ({ ...preparedWritingRunResult(), status: 'Cancelled' as const }))
+    });
+
+    render(<ManuscriptEditor client={client} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Inspect before send' }));
+
+    expect(await screen.findByLabelText('Pre-send inspection')).toHaveTextContent('openai');
+    expect(screen.getByLabelText('Pre-send inspection')).toHaveTextContent('gpt-test');
+    expect(screen.getByLabelText('Pre-send inspection')).toHaveTextContent('125 input');
+    expect(screen.getByLabelText('Pre-send inspection')).toHaveTextContent('Mara fears bells.');
+    expect(screen.getByLabelText('Pre-send inspection')).toHaveTextContent('restricted_source_1');
+    expect(screen.getByLabelText('Pre-send inspection')).toHaveTextContent('External model call requires pre-send confirmation');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm send' }));
+
+    await waitFor(() => {
+      expect(client.executePreparedWritingRun).toHaveBeenCalledWith('project_api', 'job_prepared_1', {
+        confirmed: true,
+        confirmedBy: 'operator'
+      });
+    });
+    expect(await screen.findByText('Mara waited under the clocktower until the courier arrived.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect before send' }));
+    await screen.findByLabelText('Pre-send inspection');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel prepared send' }));
+    await waitFor(() => {
+      expect(client.cancelPreparedWritingRun).toHaveBeenCalledWith('project_api', 'job_prepared_1', {
+        cancelledBy: 'operator'
+      });
+    });
+    expect(screen.queryByLabelText('Pre-send inspection')).not.toBeInTheDocument();
+  });
+
   it('loads chapters for the selected project passed by the app shell', async () => {
     const client = createWritingClient({
       listProjects: vi.fn(async () => [{ id: 'project_fallback', title: 'Fallback Project' }]),
@@ -216,10 +253,8 @@ describe('writing workbench', () => {
   });
 
   it('creates a chapter through the manuscript API and selects it', async () => {
-    const client = {
-      listProjects: vi.fn(async () => [{ id: 'project_api', title: 'API Project' }]),
+    const client = createWritingClient({
       listProjectChapters: vi.fn(async () => []),
-      getChapterCurrentBody: vi.fn(async () => null),
       createProjectChapter: vi.fn(async () => ({
         chapter: {
           id: 'chapter_new',
@@ -235,11 +270,8 @@ describe('writing workbench', () => {
           bodyArtifactId: 'artifact_new',
           status: 'Draft'
         }
-      })),
-      startWritingRun: vi.fn(),
-      addChapterVersion: vi.fn(),
-      acceptDraft: vi.fn()
-    };
+      }))
+    });
 
     render(<ManuscriptEditor client={client} />);
 
@@ -311,7 +343,10 @@ describe('writing workbench', () => {
   });
 });
 
-function createWritingClient(overrides: Record<string, unknown> = {}) {
+type WritingClientFixture = Pick<ApiClient, 'listProjects' | 'listProjectChapters' | 'getChapterCurrentBody'> &
+  WritingManuscriptApiClient;
+
+function createWritingClient(overrides: Partial<WritingClientFixture> = {}): WritingClientFixture {
   return {
     listProjects: vi.fn(async () => [{ id: 'project_api', title: 'API Project' }]),
     listProjectChapters: vi.fn(async () => [
@@ -326,6 +361,9 @@ function createWritingClient(overrides: Record<string, unknown> = {}) {
     createProjectChapter: vi.fn(),
     getChapterCurrentBody: vi.fn(async () => null),
     startWritingRun: vi.fn(async () => writingRunResult()),
+    prepareWritingRun: vi.fn(async () => preparedWritingRunResult()),
+    executePreparedWritingRun: vi.fn(async () => writingRunResult()),
+    cancelPreparedWritingRun: vi.fn(async () => ({ ...preparedWritingRunResult(), status: 'Cancelled' as const })),
     addChapterVersion: vi.fn(async () => ({
       id: 'version_accepted',
       chapterId: 'chapter_api_1',
@@ -347,7 +385,7 @@ function createWritingClient(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function writingRunResult() {
+function writingRunResult(): WritingRunResult {
   return {
     id: 'agent_run_1',
     status: 'AwaitingAcceptance',
@@ -380,6 +418,43 @@ function writingRunResult() {
       warnings: ['Canon candidate requires author review.'],
       retrievalTrace: ['query:Mara courier clocktower'],
       createdAt: '2026-04-27T00:00:00.000Z'
+    }
+  };
+}
+
+function preparedWritingRunResult(): PreparedWritingRun {
+  return {
+    id: 'job_prepared_1',
+    projectId: 'project_api',
+    agentRunId: 'agent_run_prepared_1',
+    status: 'Prepared',
+    confirmationRequired: true,
+    provider: {
+      provider: 'openai',
+      model: 'gpt-test',
+      isExternal: true,
+      secretConfigured: true
+    },
+    budgetEstimate: {
+      inputTokens: 125,
+      outputTokens: 1024,
+      estimatedCostUsd: 0.0012,
+      maxRunCostUsd: 0.25
+    },
+    warnings: ['External model call requires pre-send confirmation'],
+    blockingReasons: [],
+    expiresAt: '2026-04-28T01:00:00.000Z',
+    contextPack: {
+      id: 'context_pack_prepared',
+      taskGoal: 'Draft Opening',
+      agentRole: 'Writer',
+      riskLevel: 'Medium',
+      sections: [{ name: 'canon', content: 'Mara fears bells.' }],
+      citations: [{ sourceId: 'canon_1', quote: 'Mara fears bells.' }],
+      exclusions: ['restricted_source_1'],
+      warnings: ['Restricted source omitted.'],
+      retrievalTrace: ['query:Opening'],
+      createdAt: '2026-04-28T00:00:00.000Z'
     }
   };
 }

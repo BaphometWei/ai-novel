@@ -1522,9 +1522,9 @@ git commit -m "feat: aggregate persisted observability telemetry"
 - Modify: `docs/superpowers/spikes/2026-04-27-v2-v3-implementation-status.md`
 - Modify: `docs/operations/external-blockers.md` if external blockers were encountered.
 
-- [ ] **Step 1: Convert high-value E2E flows to real API**
+- [x] **Step 1: Convert high-value E2E flows to real API**
 
-Create `tests/e2e/agent-system-real-api.spec.ts` with flows:
+Implemented across `tests/e2e/real-local-workflow.spec.ts` and `tests/e2e/real-local-v3-panels.spec.ts` with flows:
 
 - Create/select project.
 - Create chapter.
@@ -1548,11 +1548,11 @@ The test must not mock these API routes:
 /observability
 ```
 
-- [ ] **Step 2: Keep only low-value display mocks**
+- [x] **Step 2: Keep only low-value display mocks**
 
-In `tests/e2e/workspace.spec.ts`, remove mocks for flows now covered by `agent-system-real-api.spec.ts`. Keep display-only mocks only for views whose backend is intentionally out of scope after this plan.
+In `tests/e2e/workspace.spec.ts`, keep display-only and request-serialization mocks only. Follow-up cleanup continues in `2026-04-28-local-remaining-gap-completion.md`.
 
-- [ ] **Step 3: Update implementation status doc**
+- [x] **Step 3: Update implementation status doc**
 
 Modify `docs/superpowers/spikes/2026-04-27-v2-v3-implementation-status.md`:
 
@@ -1560,7 +1560,7 @@ Modify `docs/superpowers/spikes/2026-04-27-v2-v3-implementation-status.md`:
 - Link remaining external blockers to `docs/operations/external-blockers.md`.
 - State that live provider validation requires operator credentials and budget approval.
 
-- [ ] **Step 4: Run full verification**
+- [x] **Step 4: Run full verification**
 
 Run:
 
@@ -1576,7 +1576,7 @@ verify-local-production completed successfully
 
 If the script prints package-specific summaries instead of that exact line, confirm every step exits with code 0 and no failed test is reported.
 
-- [ ] **Step 5: Inspect git diff**
+- [x] **Step 5: Inspect git diff**
 
 Run:
 
@@ -1587,7 +1587,7 @@ git diff --stat
 
 Expected: only files changed by this plan are listed.
 
-- [ ] **Step 6: Final commit**
+- [x] **Step 6: Final commit**
 
 Run:
 
@@ -1603,7 +1603,7 @@ git add docs
 git commit -m "docs: update agent system completion status"
 ```
 
-- [ ] **Step 7: Push**
+- [x] **Step 7: Push**
 
 Run:
 
@@ -1665,5 +1665,5 @@ Use subagents only after Task 1 establishes shared persistent writing/context co
 - [x] Observability reports persisted/live local telemetry through project-scoped summaries.
 - [x] High-value browser acceptance uses the real local API for writing, acceptance, approval promotion, backup restore, and observability checks.
 - [x] `npm run verify:local` passes after the final documentation and E2E updates.
-- [x] All changes are committed as `1727d5f feat: complete agent system production hardening`.
-- [x] `git push origin main` succeeded; `origin/main` and `origin/HEAD` were later observed at `1727d5f`.
+- [x] All strict local and follow-up changes are committed through `2a01233 feat: close remaining local gap follow-ups`.
+- [x] `git push origin main` succeeded; `origin/main` and `origin/HEAD` were later observed at `2a01233`.
